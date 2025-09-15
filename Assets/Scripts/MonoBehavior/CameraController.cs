@@ -57,11 +57,11 @@ public class CameraController : MonoBehaviour
         _mouseLookCameraAction = InputSystem.actions.FindAction("Camera/MouseLook");
 
         _mouseLeftClickAction = InputSystem.actions.FindAction("Camera/MouseLeftClick");
-        _mouseLeftClickAction.started += _ => _mouseInputBlockedByUI = GameController.Instance.mouseBlockedByUI;
+        _mouseLeftClickAction.started += _ => _mouseInputBlockedByUI = GameController.Instance.MouseBlockedByUI;
         _mouseLeftClickAction.canceled += _ => _mouseInputBlockedByUI = false;
 
         _mouseRightClickAction = InputSystem.actions.FindAction("Camera/MouseRightClick");
-        _mouseRightClickAction.started += _ => _mouseInputBlockedByUI = GameController.Instance.mouseBlockedByUI;
+        _mouseRightClickAction.started += _ => _mouseInputBlockedByUI = GameController.Instance.MouseBlockedByUI;
         _mouseRightClickAction.canceled += _ => _mouseInputBlockedByUI = false;
     }
 

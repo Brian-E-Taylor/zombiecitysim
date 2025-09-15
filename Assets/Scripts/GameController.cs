@@ -5,7 +5,8 @@ using UnityEngine.UI;
 
 public class GameController : MonoBehaviour
 {
-    public static GameController Instance;
+    public static GameController Instance { get; private set; }
+    public bool MouseBlockedByUI { get; private set; }
 
     public int numTilesX = 130;
     public int numTilesY = 130;
@@ -42,18 +43,24 @@ public class GameController : MonoBehaviour
     public InputField turnDelayTimeInputField;
     public Slider turnDelayTimeSlider;
 
-    public bool mouseBlockedByUI;
     private int _uiElementsBlocked;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics()
+    {
+        Instance = null;
+    }
 
     void Awake()
     {
-        if (Instance != null)
+        if (Instance != null && Instance != this)
         {
             Destroy(gameObject);
             return;
         }
 
         Instance = this;
+        DontDestroyOnLoad(gameObject);
 
         _uiElementsBlocked = 0;
     }
@@ -165,7 +172,7 @@ public class GameController : MonoBehaviour
 
     public void EnterBlockingUI()
     {
-        mouseBlockedByUI = true;
+        MouseBlockedByUI = true;
         _uiElementsBlocked++;
     }
 
@@ -173,6 +180,6 @@ public class GameController : MonoBehaviour
     {
         _uiElementsBlocked--;
         if (_uiElementsBlocked == 0)
-            mouseBlockedByUI = false;
+            MouseBlockedByUI = false;
     }
 }
