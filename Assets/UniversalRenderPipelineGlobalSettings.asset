@@ -64,21 +64,9 @@ MonoBehaviour:
       - rid: 910202447660056576
       - rid: 564306004872003584
       - rid: 564306004872003585
+      - rid: 8775864270349926400
     m_RuntimeSettings:
-      m_List:
-      - rid: 8463676746800562177
-      - rid: 8463676746800562179
-      - rid: 8463676746800562181
-      - rid: 8463676746800562182
-      - rid: 8463676746800562184
-      - rid: 8463676746800562185
-      - rid: 8463676746800562186
-      - rid: 8463676746800562188
-      - rid: 8463676746800562192
-      - rid: 8463676746800562195
-      - rid: 679595007915327489
-      - rid: 679595007915327492
-      - rid: 679595007915327493
+      m_List: []
   m_AssetVersion: 9
   m_ObsoleteDefaultVolumeProfile: {fileID: 0}
   m_RenderingLayerNames:
@@ -531,3 +519,10 @@ MonoBehaviour:
         m_setupCS: {fileID: 7200000, guid: 33be2e9a5506b2843bdb2bdff9cad5e1, type: 3}
         m_preTaaCS: {fileID: 7200000, guid: a679dba8ec4d9ce45884a270b0e22dda, type: 3}
         m_taaCS: {fileID: 7200000, guid: 3923900e2b41b5e47bc25bfdcbcdc9e6, type: 3}
+    - rid: 8775864270349926400
+      type: {class: OnTilePostProcessResource, ns: UnityEngine.Rendering.Universal,
+        asm: Unity.RenderPipelines.Universal.Runtime}
+      data:
+        m_Version: 0
+        m_UberPostShader: {fileID: 4800000, guid: fe4f13c1004a07d4ea1e30bfd0326d9e,
+          type: 3}
