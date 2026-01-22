@@ -14,7 +14,7 @@ public partial struct AnimateMoveJob : IJobEntity
     {
         var nextTranslation = math.lerp(new float3(gridPosition.Value), new float3(desiredNextGridPosition.Value), PercentAnimate);
         transform.Position = nextTranslation;
-        gridPosition.Value = math.select(gridPosition.Value, desiredNextGridPosition.Value, Math.Abs(PercentAnimate - 1.0f) < 0.0001);
+        gridPosition.Value = math.select(gridPosition.Value, desiredNextGridPosition.Value, math.abs(PercentAnimate - 1.0f) < 0.0001);
     }
 }
 
@@ -47,6 +47,6 @@ public partial struct AnimateMoveSystem : ISystem
             _totalTime = 0.0f;
         }
 
-        new AnimateMoveJob { PercentAnimate = percentAnimate }.ScheduleParallel();
+        state.Dependency = new AnimateMoveJob { PercentAnimate = percentAnimate }.ScheduleParallel(state.Dependency);
     }
 }

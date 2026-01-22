@@ -32,27 +32,55 @@ public static class LineOfSightUtilities
     [BurstCompile]
     public static bool InLineOfSightUpdated([ReadOnly] in int3 initialGridPosition, [ReadOnly] in int3 targetGridPosition, [ReadOnly] in NativeParallelHashMap<uint, int> staticCollidableHashMap)
     {
-        var dx = targetGridPosition.x - initialGridPosition.x;
-        var dz = targetGridPosition.z - initialGridPosition.z;
+        var dx = math.abs(targetGridPosition.x - initialGridPosition.x);
+        var dz = math.abs(targetGridPosition.z - initialGridPosition.z);
+        var sx = targetGridPosition.x >= initialGridPosition.x ? 1 : -1;
+        var sz = targetGridPosition.z >= initialGridPosition.z ? 1 : -1;
 
         var x = initialGridPosition.x;
         var z = initialGridPosition.z;
-        var error = 0;
-        var errorIncrement1 = dz * 2;
-        var errorIncrement2 = (dz - dx) * 2;
-        var sz = (int)math.sign(dz);
 
-        for (var i = 0; i <= dx; i++, x++)
+        if (dx > dz)
         {
-            if (staticCollidableHashMap.TryGetValue(math.hash(new int3(x, initialGridPosition.y, z)), out _))
-                return false;
+            // X-dominant (more horizontal than vertical)
+            var error = dx / 2;
+            for (var i = 0; i <= dx; i++)
+            {
+                if (staticCollidableHashMap.TryGetValue(math.hash(new int3(x, initialGridPosition.y, z)), out _))
+                    return false;
 
-            error += errorIncrement1;
-            if (error <= dx)
-                continue;
+                if (i < dx)  // Don't step past target
+                {
+                    x += sx;
+                    error -= dz;
+                    if (error < 0)
+                    {
+                        z += sz;
+                        error += dx;
+                    }
+                }
+            }
+        }
+        else
+        {
+            // Z-dominant (more vertical than horizontal)
+            var error = dz / 2;
+            for (var i = 0; i <= dz; i++)
+            {
+                if (staticCollidableHashMap.TryGetValue(math.hash(new int3(x, initialGridPosition.y, z)), out _))
+                    return false;
 
-            error -= errorIncrement2;
-            z += sz;
+                if (i < dz)  // Don't step past target
+                {
+                    z += sz;
+                    error -= dx;
+                    if (error < 0)
+                    {
+                        x += sx;
+                        error += dz;
+                    }
+                }
+            }
         }
 
         return true;

@@ -75,7 +75,7 @@ public partial struct HashCollidablesSystem : ISystem
             SystemAPI.GetSingletonRW<HashDynamicCollidableSystemComponent>().ValueRW.HashMap = hashMap;
         }
 
-        state.Dependency = JobHandle.CombineDependencies(hashStaticCollidableSystemComponent.ValueRO.Handle, hashStaticCollidableSystemComponent.ValueRO.Handle);
+        state.Dependency = JobHandle.CombineDependencies(hashStaticCollidableSystemComponent.ValueRO.Handle, hashDynamicCollidableSystemComponent.ValueRO.Handle);
     }
 
     public void OnDestroy(ref SystemState state)
