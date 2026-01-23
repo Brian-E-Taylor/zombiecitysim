@@ -909,7 +909,7 @@ MonoBehaviour:
   numZombiesSlider: {fileID: 166200671}
   numTilesXInputField: {fileID: 1603169377}
   numTilesYInputField: {fileID: 1543486601}
-  citySeedInputField: {fileID: 0}
+  citySeedInputField: {fileID: 1065146119}
   humanTurnDelayInputField: {fileID: 1302815571}
   zombieTurnDelayInputField: {fileID: 302765849}
   turnDelayTimeInputField: {fileID: 1640573133}
@@ -1416,7 +1416,7 @@ GameObject:
   - component: {fileID: 358290602}
   - component: {fileID: 358290601}
   m_Layer: 0
-  m_Name: Streets Text
+  m_Name: Seed Text
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1438,7 +1438,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -16, y: -30}
+  m_AnchoredPosition: {x: -22, y: -30}
   m_SizeDelta: {x: 48, y: 30}
   m_Pivot: {x: 1, y: 1}
 --- !u!114 &358290601
@@ -1474,7 +1474,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: Streets
+  m_Text: Seed
 --- !u!222 &358290602
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -2942,7 +2942,7 @@ GameObject:
   - component: {fileID: 1065146120}
   - component: {fileID: 1065146119}
   m_Layer: 0
-  m_Name: Streets InputField
+  m_Name: Seed InputField
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
