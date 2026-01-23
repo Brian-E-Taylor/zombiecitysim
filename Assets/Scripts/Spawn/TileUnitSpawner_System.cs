@@ -176,11 +176,11 @@ public partial struct TileUnitSpawner_System : ISystem
             tileExists[y * gameControllerComponent.numTilesX + gameControllerComponent.numTilesX - 1] = true;
         }
 
-        // Road border boundary
+        // Road border boundary (top and bottom rows)
         for (var x = 1; x < gameControllerComponent.numTilesX - 1; x++)
         {
             tileExists[x] = true;
-            tileExists[(gameControllerComponent.numTilesY - 1) * gameControllerComponent.numTilesX] = true;
+            tileExists[(gameControllerComponent.numTilesY - 1) * gameControllerComponent.numTilesX + x] = true;
         }
 
         // Fill in buildings

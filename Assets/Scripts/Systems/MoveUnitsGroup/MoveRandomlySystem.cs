@@ -14,10 +14,10 @@ public partial struct MoveRandomlyJob : IJobEntity
     {
         var myGridPositionValue = gridPosition.Value;
 
-        var upDirKey = math.hash(new int3(myGridPositionValue.x, myGridPositionValue.y, myGridPositionValue.z + 1));
-        var rightDirKey = math.hash(new int3(myGridPositionValue.x + 1, myGridPositionValue.y, myGridPositionValue.z));
-        var downDirKey = math.hash(new int3(myGridPositionValue.x, myGridPositionValue.y, myGridPositionValue.z - 1));
-        var leftDirKey = math.hash(new int3(myGridPositionValue.x - 1, myGridPositionValue.y, myGridPositionValue.z));
+        var upDirKey = GridPositionHash.GetKey(myGridPositionValue.x, myGridPositionValue.z + 1);
+        var rightDirKey = GridPositionHash.GetKey(myGridPositionValue.x + 1, myGridPositionValue.z);
+        var downDirKey = GridPositionHash.GetKey(myGridPositionValue.x, myGridPositionValue.z - 1);
+        var leftDirKey = GridPositionHash.GetKey(myGridPositionValue.x - 1, myGridPositionValue.z);
 
         var upMoveAvail = true;
         var rightMoveAvail = true;

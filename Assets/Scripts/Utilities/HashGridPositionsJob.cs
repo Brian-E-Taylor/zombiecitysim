@@ -10,7 +10,7 @@ public partial struct HashGridPositionsJob : IJobEntity
 
     public void Execute([EntityIndexInQuery] int entityIndexInQuery, [ReadOnly] in GridPosition gridPosition)
     {
-        var hash = math.hash(gridPosition.Value);
-        ParallelWriter.TryAdd(hash, entityIndexInQuery);
+        var key = GridPositionHash.GetKey(gridPosition.Value.x, gridPosition.Value.z);
+        ParallelWriter.TryAdd(key, entityIndexInQuery);
     }
 }

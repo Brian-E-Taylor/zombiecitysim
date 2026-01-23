@@ -10,8 +10,8 @@ public partial struct HashNextGridPositionsJob : IJobEntity
 
     public void Execute([EntityIndexInQuery] int entityIndexInQuery, [ReadOnly] in DesiredNextGridPosition desiredNextGridPosition)
     {
-        var hash = math.hash(desiredNextGridPosition.Value);
-        ParallelWriter.Add(hash, entityIndexInQuery);
+        var key = GridPositionHash.GetKey(desiredNextGridPosition.Value.x, desiredNextGridPosition.Value.z);
+        ParallelWriter.Add(key, entityIndexInQuery);
     }
 }
 
@@ -23,8 +23,8 @@ public partial struct FinalizeMovementJob : IJobEntity
     public void Execute(ref DesiredNextGridPosition desiredNextGridPosition, [ReadOnly] in GridPosition gridPosition)
     {
         // Check for all units that wanted to move
-        var hash = math.hash(desiredNextGridPosition.Value);
-        if (!NextGridPositionHashMap.TryGetFirstValue(hash, out _, out var iter))
+        var key = GridPositionHash.GetKey(desiredNextGridPosition.Value.x, desiredNextGridPosition.Value.z);
+        if (!NextGridPositionHashMap.TryGetFirstValue(key, out _, out var iter))
             return;
 
         // Don't allow movement if another unit has already claimed that grid space

@@ -13,8 +13,8 @@ public partial struct DealDamageJob : IJobEntity
 
     public void Execute(ref Health health, ref URPMaterialPropertyBaseColor materialColor, [ReadOnly] in MaxHealth maxHealth, [ReadOnly] in GridPosition gridPosition)
     {
-        var gridPositionHash = math.hash(gridPosition.Value);
-        if (!DamageAmountHashMap.TryGetFirstValue(gridPositionHash, out var damage, out var it))
+        var gridPositionKey = GridPositionHash.GetKey(gridPosition.Value.x,  gridPosition.Value.z);
+        if (!DamageAmountHashMap.TryGetFirstValue(gridPositionKey, out var damage, out var it))
             return;
 
         var myHealth = health.Value - damage;

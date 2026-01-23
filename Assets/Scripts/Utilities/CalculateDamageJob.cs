@@ -21,7 +21,7 @@ public partial struct CalculateDamageJob : IJobEntity
                 if (x == 0 && z == 0)
                     continue;
 
-                var damageKey = math.hash(new int3(gridPosition.Value.x + x, gridPosition.Value.y, gridPosition.Value.z + z));
+                var damageKey = GridPositionHash.GetKey(gridPosition.Value.x + x, gridPosition.Value.z + z);
                 if (DamageTakingHashMap.TryGetValue(damageKey, out _))
                     DamageAmountHashMapParallelWriter.Add(damageKey, damage.Value);
             }

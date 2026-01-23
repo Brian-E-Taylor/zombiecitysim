@@ -42,7 +42,7 @@ public partial struct MoveEscapeFromZombiesJob : IJobEntity
                             continue;
 
                         var targetGridPosition = new int3(myGridPositionValue.x + x, myGridPositionValue.y, myGridPositionValue.z + z);
-                        var targetKey = math.hash(targetGridPosition);
+                        var targetKey = GridPositionHash.GetKey(targetGridPosition.x, targetGridPosition.z);
 
                         if (!ZombieHashMap.TryGetValue(targetKey, out _))
                             continue;
@@ -66,10 +66,10 @@ public partial struct MoveEscapeFromZombiesJob : IJobEntity
             var direction = new int3((int)-averageTarget.x, (int)averageTarget.y, (int)-averageTarget.z);
 
             // Check if space is already occupied
-            var moveLeftKey = math.hash(new int3(myGridPositionValue.x - 1, myGridPositionValue.y, myGridPositionValue.z));
-            var moveRightKey = math.hash(new int3(myGridPositionValue.x + 1, myGridPositionValue.y, myGridPositionValue.z));
-            var moveDownKey = math.hash(new int3(myGridPositionValue.x, myGridPositionValue.y, myGridPositionValue.z - 1));
-            var moveUpKey = math.hash(new int3(myGridPositionValue.x, myGridPositionValue.y, myGridPositionValue.z + 1));
+            var moveLeftKey = GridPositionHash.GetKey(myGridPositionValue.x - 1, myGridPositionValue.z);
+            var moveRightKey = GridPositionHash.GetKey(myGridPositionValue.x + 1, myGridPositionValue.z);
+            var moveDownKey = GridPositionHash.GetKey(myGridPositionValue.x, myGridPositionValue.z - 1);
+            var moveUpKey = GridPositionHash.GetKey(myGridPositionValue.x, myGridPositionValue.z + 1);
             if (math.abs(direction.x) >= math.abs(direction.z))
             {
                 // Move horizontally

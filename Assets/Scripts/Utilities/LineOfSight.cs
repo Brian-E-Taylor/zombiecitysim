@@ -18,7 +18,7 @@ public static class LineOfSightUtilities
         for (var i = 0; i < (int)l; i++)
         {
             var gridPosition = new int3((int)math.floor(ox), initialGridPosition.y, (int)math.floor(oz));
-            var key = math.hash(gridPosition);
+            var key = GridPositionHash.GetKey(gridPosition.x, gridPosition.z);
             if (staticCollidableHashMap.TryGetValue(key, out _))
                 return false;
 
@@ -46,7 +46,7 @@ public static class LineOfSightUtilities
             var error = dx / 2;
             for (var i = 0; i <= dx; i++)
             {
-                if (staticCollidableHashMap.TryGetValue(math.hash(new int3(x, initialGridPosition.y, z)), out _))
+                if (staticCollidableHashMap.TryGetValue(GridPositionHash.GetKey(x, z), out _))
                     return false;
 
                 if (i < dx)  // Don't step past target
@@ -67,7 +67,7 @@ public static class LineOfSightUtilities
             var error = dz / 2;
             for (var i = 0; i <= dz; i++)
             {
-                if (staticCollidableHashMap.TryGetValue(math.hash(new int3(x, initialGridPosition.y, z)), out _))
+                if (staticCollidableHashMap.TryGetValue(GridPositionHash.GetKey(x, z), out _))
                     return false;
 
                 if (i < dz)  // Don't step past target

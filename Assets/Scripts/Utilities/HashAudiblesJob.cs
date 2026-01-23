@@ -10,7 +10,7 @@ public partial struct HashAudiblesJob : IJobEntity
 
     public void Execute(in Audible audible)
     {
-        var hash = math.hash(audible.GridPositionValue);
-        ParallelWriter.Add(hash, audible.Target);
+        var key = GridPositionHash.GetKey(audible.GridPositionValue.x,  audible.GridPositionValue.z);
+        ParallelWriter.Add(key, audible.Target);
     }
 }
