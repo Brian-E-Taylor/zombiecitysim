@@ -26,6 +26,7 @@ public partial struct SpawnJob : IJobEntity
     [ReadOnly] public NativeList<TileUnitKinds> TileUnitKindsNativeList;
     [ReadOnly] public NativeList<int> TileUnitHealthNativeList;
     [ReadOnly] public NativeList<int> TileUnitDamageNativeList;
+    [ReadOnly] public NativeList<byte> TileUnitRoadHierarchyNativeList;
 
     public void Execute([EntityIndexInQuery] int entityIndexInQuery, [ReadOnly] in TileUnitSpawner_Data tileUnitSpawner)
     {
@@ -48,7 +49,9 @@ public partial struct SpawnJob : IJobEntity
                         Quaternion.identity,
                         (TileUnitPositionsNativeList[i].x >= TileUnitPositionsNativeList[i].z ? TileUnitPositionsNativeList[i].x : TileUnitPositionsNativeList[i].z) / 10.0f - 0.1f
                     ));
-                    Ecb.AddComponent(entityIndexInQuery, instance, new URPMaterialPropertyBaseColor { Value = new float4(0.8f, 0.8f, 0.8f, 1.0f) });
+                    // Road hierarchy-based color gradient
+                    float brightness = CityGridHelper.GetRoadBrightness(TileUnitRoadHierarchyNativeList[i]);
+                    Ecb.AddComponent(entityIndexInQuery, instance, new URPMaterialPropertyBaseColor { Value = new float4(brightness, brightness, brightness, 1.0f) });
                     Ecb.AddComponent(entityIndexInQuery, instance, new RoadSurface());
                     break;
                 case TileUnitKinds.HumanUnit:
@@ -117,57 +120,49 @@ public partial struct TileUnitSpawner_System : ISystem
 
         var gameControllerComponent = SystemAPI.GetSingleton<GameControllerComponent>();
 
+        // Initialize seeded RNG (seed is guaranteed non-zero from UpdateGameControllerComponentSystem)
+        var rng = new Unity.Mathematics.Random(gameControllerComponent.citySeed);
+
         var tileUnitPositions = new NativeList<int3>(Allocator.TempJob);
         var tileUnitKinds = new NativeList<TileUnitKinds>(Allocator.TempJob);
         var tileUnitHealth = new NativeList<int>(Allocator.TempJob);
         var tileUnitDamage = new NativeList<int>(Allocator.TempJob);
+        var tileUnitRoadHierarchy = new NativeList<byte>(Allocator.TempJob);
 
-        var tileExists = new NativeArray<bool>(gameControllerComponent.numTilesY * gameControllerComponent.numTilesX, Allocator.Temp);
+        int gridSize = gameControllerComponent.numTilesY * gameControllerComponent.numTilesX;
+        var tileExists = new NativeArray<bool>(gridSize, Allocator.Temp);
+        var roadHierarchy = new NativeArray<byte>(gridSize, Allocator.Temp);
+
         for (var y = 0; y < gameControllerComponent.numTilesY; y++)
             for (var x = 0; x < gameControllerComponent.numTilesX; x++)
                 tileExists[y * gameControllerComponent.numTilesX + x] = true;
 
-        // Streets
-        for (int i = 0, xPos = 1; i < gameControllerComponent.numStreets / 2; i++)
-        {
-            var roadSize = UnityEngine.Random.Range(1, 4);
-            xPos += UnityEngine.Random.Range(0, 2 * (gameControllerComponent.numTilesX / (gameControllerComponent.numStreets / 2)));
-            if (xPos >= gameControllerComponent.numTilesX - 1)
-                break;
+        // BSP city generation
+        var cityBlocks = new NativeList<CityBlock>(128, Allocator.Temp);
+        var roadSplits = new NativeList<RoadSplit>(128, Allocator.Temp);
 
-            while (roadSize >= 1 && xPos < gameControllerComponent.numTilesX - 1)
-            {
-                for (var yPos = 1; yPos < gameControllerComponent.numTilesY - 1; yPos++)
-                {
-                    if (tileExists[yPos * gameControllerComponent.numTilesX + xPos])
-                    {
-                        tileExists[yPos * gameControllerComponent.numTilesX + xPos] = false;
-                    }
-                }
-                xPos++;
-                roadSize--;
-            }
-        }
-        for (int i = 0, yPos = 1; i < gameControllerComponent.numStreets / 2; i++)
-        {
-            var roadSize = UnityEngine.Random.Range(1, 4);
-            yPos += UnityEngine.Random.Range(0, 2 * (gameControllerComponent.numTilesX / (gameControllerComponent.numStreets / 2)));
-            if (yPos >= gameControllerComponent.numTilesX - 1)
-                break;
+        BSPCityGenerator.GenerateBlocks(
+            gameControllerComponent.numTilesX,
+            gameControllerComponent.numTilesY,
+            1, // border size
+            gameControllerComponent.minBlockSize,
+            gameControllerComponent.maxBlockSize,
+            gameControllerComponent.splitVariance,
+            ref rng,
+            ref cityBlocks,
+            ref roadSplits
+        );
 
-            while (roadSize >= 1 && yPos < gameControllerComponent.numTilesY - 1)
-            {
-                for (var xPos = 1; xPos < gameControllerComponent.numTilesX - 1; xPos++)
-                {
-                    if (tileExists[yPos * gameControllerComponent.numTilesX + xPos])
-                    {
-                        tileExists[yPos * gameControllerComponent.numTilesX + xPos] = false;
-                    }
-                }
-                yPos++;
-                roadSize--;
-            }
-        }
+        BSPCityGenerator.ApplyRoadsToGridWithHierarchy(
+            ref tileExists,
+            ref roadHierarchy,
+            gameControllerComponent.numTilesX,
+            gameControllerComponent.numTilesY,
+            ref roadSplits
+        );
+
+        cityBlocks.Dispose();
+        roadSplits.Dispose();
 
         // Road border boundary
         for (var y = 0; y < gameControllerComponent.numTilesY; y++)
@@ -195,6 +190,7 @@ public partial struct TileUnitSpawner_System : ISystem
                 tileUnitPositions.Add(new int3(x, 1, y));
                 tileUnitHealth.Add(0);
                 tileUnitDamage.Add(0);
+                tileUnitRoadHierarchy.Add(0); // 0 = not a road
             }
         }
 
@@ -203,6 +199,7 @@ public partial struct TileUnitSpawner_System : ISystem
         tileUnitPositions.Add(new int3(gameControllerComponent.numTilesX, 0, gameControllerComponent.numTilesY));
         tileUnitHealth.Add(0);
         tileUnitDamage.Add(0);
+        tileUnitRoadHierarchy.Add((byte)RoadHierarchyLevel.Arterial); // Default for floor plane
 
         // Human Units
         for (var i = 0; i < gameControllerComponent.numHumans; i++)
@@ -211,8 +208,8 @@ public partial struct TileUnitSpawner_System : ISystem
 
             do
             {
-                xPos = UnityEngine.Random.Range(1, gameControllerComponent.numTilesX - 1);
-                yPos = UnityEngine.Random.Range(1, gameControllerComponent.numTilesY - 1);
+                xPos = rng.NextInt(1, gameControllerComponent.numTilesX - 1);
+                yPos = rng.NextInt(1, gameControllerComponent.numTilesY - 1);
             } while (tileExists[yPos * gameControllerComponent.numTilesX + xPos]);
 
             tileExists[yPos * gameControllerComponent.numTilesX + xPos] = true;
@@ -220,6 +217,7 @@ public partial struct TileUnitSpawner_System : ISystem
             tileUnitPositions.Add(new int3(xPos, 1, yPos));
             tileUnitHealth.Add(gameControllerComponent.humanStartingHealth);
             tileUnitDamage.Add(gameControllerComponent.humanDamage);
+            tileUnitRoadHierarchy.Add(0); // Not a road
         }
 
         // Zombie Units
@@ -229,8 +227,8 @@ public partial struct TileUnitSpawner_System : ISystem
 
             do
             {
-                xPos = UnityEngine.Random.Range(1, gameControllerComponent.numTilesX - 1);
-                yPos = UnityEngine.Random.Range(1, gameControllerComponent.numTilesY - 1);
+                xPos = rng.NextInt(1, gameControllerComponent.numTilesX - 1);
+                yPos = rng.NextInt(1, gameControllerComponent.numTilesY - 1);
             } while (tileExists[yPos * gameControllerComponent.numTilesX + xPos]);
 
             tileExists[yPos * gameControllerComponent.numTilesX + xPos] = true;
@@ -238,9 +236,11 @@ public partial struct TileUnitSpawner_System : ISystem
             tileUnitPositions.Add(new int3(xPos, 1, yPos));
             tileUnitHealth.Add(gameControllerComponent.zombieStartingHealth);
             tileUnitDamage.Add(gameControllerComponent.zombieDamage);
+            tileUnitRoadHierarchy.Add(0); // Not a road
         }
 
         tileExists.Dispose();
+        roadHierarchy.Dispose();
 
         new SpawnJob
         {
@@ -253,13 +253,15 @@ public partial struct TileUnitSpawner_System : ISystem
             TileUnitPositionsNativeList = tileUnitPositions,
             TileUnitKindsNativeList = tileUnitKinds,
             TileUnitHealthNativeList = tileUnitHealth,
-            TileUnitDamageNativeList = tileUnitDamage
+            TileUnitDamageNativeList = tileUnitDamage,
+            TileUnitRoadHierarchyNativeList = tileUnitRoadHierarchy
         }.Run();
 
         tileUnitPositions.Dispose(state.Dependency);
         tileUnitKinds.Dispose(state.Dependency);
         tileUnitHealth.Dispose(state.Dependency);
         tileUnitDamage.Dispose(state.Dependency);
+        tileUnitRoadHierarchy.Dispose(state.Dependency);
 
         state.EntityManager.CreateSingleton<RunWorld>();
     }

@@ -10,7 +10,13 @@ public struct GameControllerComponent : IComponentData
 {
     public int numTilesX;
     public int numTilesY;
-    public int numStreets;
+
+    public uint citySeed;  // 0 = random seed from time
+
+    // BSP config
+    public int minBlockSize;
+    public int maxBlockSize;
+    public float splitVariance;
 
     public int numHumans;
     public int humanStartingHealth;
@@ -51,7 +57,16 @@ public partial class UpdateGameControllerComponentSystem : SystemBase
 
         gameControllerComponent.ValueRW.numTilesX = GameController.Instance.numTilesX;
         gameControllerComponent.ValueRW.numTilesY = GameController.Instance.numTilesY;
-        gameControllerComponent.ValueRW.numStreets = GameController.Instance.numStreets;
+
+        // Generate random seed if citySeed is 0 (done here since SystemBase is not Burst-compiled)
+        uint seed = GameController.Instance.citySeed;
+        if (seed == 0)
+            seed = (uint)System.DateTime.Now.Ticks;
+        gameControllerComponent.ValueRW.citySeed = seed;
+
+        gameControllerComponent.ValueRW.minBlockSize = GameController.Instance.minBlockSize;
+        gameControllerComponent.ValueRW.maxBlockSize = GameController.Instance.maxBlockSize;
+        gameControllerComponent.ValueRW.splitVariance = GameController.Instance.splitVariance;
 
         gameControllerComponent.ValueRW.numHumans = GameController.Instance.numHumans;
         gameControllerComponent.ValueRW.humanStartingHealth = GameController.Instance.humanStartingHealth;

@@ -10,7 +10,13 @@ public class GameController : MonoBehaviour
 
     public int numTilesX = 130;
     public int numTilesY = 130;
-    public int numStreets = 30;
+
+    public uint citySeed = 0;  // 0 = random seed from time
+
+    // BSP config (Inspector only)
+    public int minBlockSize = 15;
+    public int maxBlockSize = 40;
+    public float splitVariance = 0.2f;
 
     public int numHumans = 1000;
     public int humanStartingHealth = 100;
@@ -36,7 +42,7 @@ public class GameController : MonoBehaviour
 
     public InputField numTilesXInputField;
     public InputField numTilesYInputField;
-    public InputField streetsInputField;
+    public InputField citySeedInputField;
 
     public InputField humanTurnDelayInputField;
     public InputField zombieTurnDelayInputField;
@@ -75,7 +81,8 @@ public class GameController : MonoBehaviour
 
         numTilesXInputField.text = numTilesX.ToString();
         numTilesYInputField.text = numTilesY.ToString();
-        streetsInputField.text = numStreets.ToString();
+        if (citySeedInputField != null)
+            citySeedInputField.text = citySeed.ToString();
 
         humanTurnDelayInputField.text = humanTurnDelay.ToString();
         zombieTurnDelayInputField.text = zombieTurnDelay.ToString();
@@ -129,9 +136,9 @@ public class GameController : MonoBehaviour
         numTilesY = int.Parse(num);
     }
 
-    public void SetNumStreetsInputField(string num)
+    public void SetCitySeedInputField(string num)
     {
-        numStreets = int.Parse(num);
+        citySeed = uint.Parse(num);
     }
 
     public void OnRegeneratePressed()

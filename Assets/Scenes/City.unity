@@ -886,8 +886,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   numTilesX: 900
   numTilesY: 900
-  numStreets: 800
-  numHumans: 45000
+  citySeed: 0
+  minBlockSize: 15
+  maxBlockSize: 40
+  splitVariance: 0.2
+  numHumans: 10000
   humanStartingHealth: 100
   humanDamage: 0
   humanVisionDistance: 10
@@ -906,7 +909,7 @@ MonoBehaviour:
   numZombiesSlider: {fileID: 166200671}
   numTilesXInputField: {fileID: 1603169377}
   numTilesYInputField: {fileID: 1543486601}
-  streetsInputField: {fileID: 1065146119}
+  citySeedInputField: {fileID: 0}
   humanTurnDelayInputField: {fileID: 1302815571}
   zombieTurnDelayInputField: {fileID: 302765849}
   turnDelayTimeInputField: {fileID: 1640573133}
@@ -2557,6 +2560,7 @@ Canvas:
   m_OverridePixelPerfect: 0
   m_SortingBucketNormalizedSize: 0
   m_VertexColorAlwaysGammaSpace: 0
+  m_UseReflectionProbes: 0
   m_AdditionalShaderChannelsFlag: 0
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
@@ -2853,7 +2857,7 @@ Light:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1021352718}
   m_Enabled: 1
-  serializedVersion: 12
+  serializedVersion: 13
   m_Type: 1
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_Intensity: 1
@@ -2905,7 +2909,7 @@ Light:
   m_UseBoundingSphereOverride: 0
   m_UseViewFrustumForShadowCasterCull: 1
   m_ForceVisible: 0
-  m_ShadowRadius: 0
+  m_ShapeRadius: 0
   m_ShadowAngle: 0
   m_LightUnit: 1
   m_LuxAtDistance: 1
