@@ -36,9 +36,9 @@ public partial struct SpawnJob : IJobEntity
             switch (TileUnitKindsNativeList[i])
             {
                 case TileUnitKinds.BuildingTile:
-                    instance = Ecb.Instantiate(entityIndexInQuery, tileUnitSpawner.BuildingTile_Prefab);
-                    Ecb.SetComponent(entityIndexInQuery, instance, LocalTransform.FromPosition(TileUnitPositionsNativeList[i]));
-                    Ecb.AddComponent(entityIndexInQuery, instance, new URPMaterialPropertyBaseColor { Value = new float4(0.0f, 0.0f, 0.0f, 1.0f) });
+                    // Create collision-only entity (no visual components)
+                    // Visual rendering handled by ProceduralCityMeshGenerator
+                    instance = Ecb.CreateEntity(entityIndexInQuery);
                     Ecb.AddComponent(entityIndexInQuery, instance, new GridPosition { Value = new int3(TileUnitPositionsNativeList[i]) });
                     Ecb.AddComponent(entityIndexInQuery, instance, new StaticCollidable());
                     break;
@@ -103,7 +103,7 @@ public partial struct TileUnitSpawner_System : ISystem
         state.RequireForUpdate<BeginInitializationEntityCommandBufferSystem.Singleton>();
     }
 
-    [BurstCompile]
+    // Note: Not Burst-compiled because we need to call managed code (ProceduralCityMeshGenerator)
     public void OnUpdate(ref SystemState state)
     {
         if (SystemAPI.HasSingleton<RunWorld>())
@@ -128,10 +128,16 @@ public partial struct TileUnitSpawner_System : ISystem
         var tileUnitHealth = new NativeList<int>(Allocator.TempJob);
         var tileUnitDamage = new NativeList<int>(Allocator.TempJob);
         var tileUnitRoadHierarchy = new NativeList<byte>(Allocator.TempJob);
+        // These are only used for mesh generation, not in jobs, so use Temp allocator
+        var tileUnitHeights = new NativeList<byte>(Allocator.Temp);
+        var tileUnitBuildingIds = new NativeList<ushort>(Allocator.Temp);
 
         int gridSize = gameControllerComponent.numTilesY * gameControllerComponent.numTilesX;
         var tileExists = new NativeArray<bool>(gridSize, Allocator.Temp);
         var roadHierarchy = new NativeArray<byte>(gridSize, Allocator.Temp);
+        var regionIds = new NativeArray<ushort>(gridSize, Allocator.Temp);
+        var buildingIds = new NativeArray<ushort>(gridSize, Allocator.Temp);
+        var buildingHeights = new NativeArray<byte>(gridSize, Allocator.Temp, NativeArrayOptions.ClearMemory);
 
         for (var y = 0; y < gameControllerComponent.numTilesY; y++)
             for (var x = 0; x < gameControllerComponent.numTilesX; x++)
@@ -164,26 +170,70 @@ public partial struct TileUnitSpawner_System : ISystem
         cityBlocks.Dispose();
         roadSplits.Dispose();
 
-        // Road border boundary
+        // Temporarily mark border tiles as false so they're excluded from region detection
+        // This prevents templates from carving into the border walls
         for (var y = 0; y < gameControllerComponent.numTilesY; y++)
         {
-            tileExists[y * gameControllerComponent.numTilesX] = true;
-            tileExists[y * gameControllerComponent.numTilesX + gameControllerComponent.numTilesX - 1] = true;
+            tileExists[y * gameControllerComponent.numTilesX] = false; // Left edge
+            tileExists[y * gameControllerComponent.numTilesX + gameControllerComponent.numTilesX - 1] = false; // Right edge
         }
-
-        // Road border boundary (top and bottom rows)
-        for (var x = 1; x < gameControllerComponent.numTilesX - 1; x++)
+        for (var x = 0; x < gameControllerComponent.numTilesX; x++)
         {
-            tileExists[x] = true;
-            tileExists[(gameControllerComponent.numTilesY - 1) * gameControllerComponent.numTilesX + x] = true;
+            tileExists[x] = false; // Bottom edge
+            tileExists[(gameControllerComponent.numTilesY - 1) * gameControllerComponent.numTilesX + x] = false; // Top edge
         }
 
-        // Fill in buildings
+        // Detect contiguous building regions (border tiles excluded)
+        var regions = new NativeList<BuildingRegion>(128, Allocator.Temp);
+        BuildingRegionDetector.DetectRegions(
+            ref tileExists,
+            gameControllerComponent.numTilesX,
+            gameControllerComponent.numTilesY,
+            ref regionIds,
+            ref regions
+        );
+
+        // Apply building templates to regions (assigns buildingIds and heights, may carve courtyards)
+        BuildingTemplates.ApplyTemplatesToRegions(
+            ref tileExists,
+            ref regionIds,
+            ref buildingIds,
+            ref buildingHeights,
+            gameControllerComponent.numTilesX,
+            gameControllerComponent.numTilesY,
+            ref regions,
+            ref rng
+        );
+
+        regions.Dispose();
+
+        // Now add border walls - they're separate from building regions
+        for (var y = 0; y < gameControllerComponent.numTilesY; y++)
+        {
+            int leftIdx = y * gameControllerComponent.numTilesX;
+            int rightIdx = y * gameControllerComponent.numTilesX + gameControllerComponent.numTilesX - 1;
+            tileExists[leftIdx] = true;
+            tileExists[rightIdx] = true;
+            buildingHeights[leftIdx] = 3; // Border walls are taller
+            buildingHeights[rightIdx] = 3;
+        }
+        for (var x = 0; x < gameControllerComponent.numTilesX; x++)
+        {
+            int bottomIdx = x;
+            int topIdx = (gameControllerComponent.numTilesY - 1) * gameControllerComponent.numTilesX + x;
+            tileExists[bottomIdx] = true;
+            tileExists[topIdx] = true;
+            buildingHeights[bottomIdx] = 3;
+            buildingHeights[topIdx] = 3;
+        }
+
+        // Fill in buildings with their assigned heights
         for (var y = 0; y < gameControllerComponent.numTilesY; y++)
         {
             for (var x = 0; x < gameControllerComponent.numTilesX; x++)
             {
-                if (!tileExists[y * gameControllerComponent.numTilesX + x])
+                int idx = y * gameControllerComponent.numTilesX + x;
+                if (!tileExists[idx])
                     continue;
 
                 tileUnitKinds.Add(TileUnitKinds.BuildingTile);
@@ -191,6 +241,8 @@ public partial struct TileUnitSpawner_System : ISystem
                 tileUnitHealth.Add(0);
                 tileUnitDamage.Add(0);
                 tileUnitRoadHierarchy.Add(0); // 0 = not a road
+                tileUnitHeights.Add(buildingHeights[idx]);
+                tileUnitBuildingIds.Add(buildingIds[idx]);
             }
         }
 
@@ -200,6 +252,8 @@ public partial struct TileUnitSpawner_System : ISystem
         tileUnitHealth.Add(0);
         tileUnitDamage.Add(0);
         tileUnitRoadHierarchy.Add((byte)RoadHierarchyLevel.Arterial); // Default for floor plane
+        tileUnitHeights.Add(0);
+        tileUnitBuildingIds.Add(0);
 
         // Human Units
         for (var i = 0; i < gameControllerComponent.numHumans; i++)
@@ -218,6 +272,8 @@ public partial struct TileUnitSpawner_System : ISystem
             tileUnitHealth.Add(gameControllerComponent.humanStartingHealth);
             tileUnitDamage.Add(gameControllerComponent.humanDamage);
             tileUnitRoadHierarchy.Add(0); // Not a road
+            tileUnitHeights.Add(0);
+            tileUnitBuildingIds.Add(0);
         }
 
         // Zombie Units
@@ -237,10 +293,35 @@ public partial struct TileUnitSpawner_System : ISystem
             tileUnitHealth.Add(gameControllerComponent.zombieStartingHealth);
             tileUnitDamage.Add(gameControllerComponent.zombieDamage);
             tileUnitRoadHierarchy.Add(0); // Not a road
+            tileUnitHeights.Add(0);
+            tileUnitBuildingIds.Add(0);
+        }
+
+        // Collect building mesh data for procedural generation (before disposing native arrays)
+        var buildingMeshDataList = new System.Collections.Generic.List<BuildingMeshData>();
+        for (int i = 0; i < tileUnitKinds.Length; i++)
+        {
+            if (tileUnitKinds[i] == TileUnitKinds.BuildingTile)
+            {
+                buildingMeshDataList.Add(new BuildingMeshData
+                {
+                    X = tileUnitPositions[i].x,
+                    Z = tileUnitPositions[i].z,
+                    Height = tileUnitHeights[i],
+                    BuildingId = tileUnitBuildingIds[i]
+                });
+            }
         }
 
         tileExists.Dispose();
         roadHierarchy.Dispose();
+        regionIds.Dispose();
+        buildingIds.Dispose();
+        buildingHeights.Dispose();
+
+        // Dispose mesh-only lists now that we've collected the data
+        tileUnitHeights.Dispose();
+        tileUnitBuildingIds.Dispose();
 
         new SpawnJob
         {
@@ -262,6 +343,16 @@ public partial struct TileUnitSpawner_System : ISystem
         tileUnitHealth.Dispose(state.Dependency);
         tileUnitDamage.Dispose(state.Dependency);
         tileUnitRoadHierarchy.Dispose(state.Dependency);
+
+        // Generate procedural city mesh (buildings rendered via MonoBehaviour, not ECS)
+        if (ProceduralCityMeshGenerator.Instance != null)
+        {
+            ProceduralCityMeshGenerator.Instance.GenerateCityMesh(
+                buildingMeshDataList.ToArray(),
+                gameControllerComponent.numTilesX,
+                gameControllerComponent.numTilesY
+            );
+        }
 
         state.EntityManager.CreateSingleton<RunWorld>();
     }
