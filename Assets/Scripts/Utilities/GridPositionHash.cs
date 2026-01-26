@@ -20,4 +20,17 @@ public static class GridPositionHash
         // This is collision-free for grids up to 65536 x 65536
         return (uint)(x & 0xFFFF) | ((uint)(z & 0xFFFF) << 16);
     }
+
+    /// <summary>
+    /// Encodes a source-target position pair into a unique ulong key for LOS caching.
+    /// Combines two grid positions (source and target) into a single 64-bit key.
+    /// </summary>
+    [BurstCompile]
+    public static ulong GetLOSKey(int sourceX, int sourceZ, int targetX, int targetZ)
+    {
+        // Pack source position in lower 32 bits, target position in upper 32 bits
+        var sourceKey = GetKey(sourceX, sourceZ);
+        var targetKey = GetKey(targetX, targetZ);
+        return (ulong)sourceKey | ((ulong)targetKey << 32);
+    }
 }

@@ -1,5 +1,6 @@
 ﻿using Unity.Burst;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
@@ -13,6 +14,14 @@ public partial struct MoveEscapeFromZombiesJob : IJobEntity
     [ReadOnly] public NativeParallelHashMap<uint, int> ZombieHashMap;
     [ReadOnly] public NativeParallelHashMap<uint, int> StaticCollidablesHashMap;
     [ReadOnly] public NativeParallelHashMap<uint, int> DynamicCollidablesHashMap;
+
+    // LOS cache for avoiding redundant line-of-sight calculations
+    // NativeDisableContainerSafetyRestriction is safe here because:
+    // - TryGetValue is a read-only operation
+    // - TryAdd uses atomic operations and is thread-safe for concurrent writes
+    [ReadOnly] public NativeParallelHashMap<ulong, byte> LOSCacheRead;
+    [NativeDisableContainerSafetyRestriction]
+    public NativeParallelHashMap<ulong, byte>.ParallelWriter LOSCacheWriter;
 
     public void Execute(ref DesiredNextGridPosition desiredNextGridPosition, [ReadOnly] in GridPosition gridPosition, [ReadOnly] in TurnActive turnActive)
     {
@@ -47,8 +56,21 @@ public partial struct MoveEscapeFromZombiesJob : IJobEntity
                         if (!ZombieHashMap.TryGetValue(targetKey, out _))
                             continue;
 
-                        // Check if we have line of sight to the target
-                        if (!LineOfSightUtilities.InLineOfSightUpdated(myGridPositionValue, targetGridPosition, StaticCollidablesHashMap))
+                        // Check LOS cache first, compute and cache if miss
+                        var losKey = GridPositionHash.GetLOSKey(myGridPositionValue.x, myGridPositionValue.z, targetGridPosition.x, targetGridPosition.z);
+                        bool hasLOS;
+                        if (LOSCacheRead.TryGetValue(losKey, out var cachedLOS))
+                        {
+                            hasLOS = cachedLOS == 1;
+                        }
+                        else
+                        {
+                            hasLOS = LineOfSightUtilities.InLineOfSightUpdated(myGridPositionValue, targetGridPosition, StaticCollidablesHashMap);
+                            // Cache the result (TryAdd is safe from parallel writes - duplicates are ignored)
+                            LOSCacheWriter.TryAdd(losKey, hasLOS ? (byte)1 : (byte)0);
+                        }
+
+                        if (!hasLOS)
                             continue;
 
                         averageTarget += new float3(x, 0, z);
@@ -135,6 +157,7 @@ public partial struct MoveEscapeFromZombiesSystem : ISystem
         state.RequireForUpdate<HashStaticCollidableSystemComponent>();
         state.RequireForUpdate<HashDynamicCollidableSystemComponent>();
         state.RequireForUpdate<GameControllerComponent>();
+        state.RequireForUpdate<LOSCacheComponent>();
     }
 
     [BurstCompile]
@@ -175,6 +198,9 @@ public partial struct MoveEscapeFromZombiesSystem : ISystem
             hashMoveEscapeTargetVisionJobHandle
         );
 
+        // Get LOS cache for this frame
+        var losCacheComponent = SystemAPI.GetSingleton<LOSCacheComponent>();
+
         state.Dependency = new MoveEscapeFromZombiesJob
         {
             VisionDistance = gameControllerComponent.humanVisionDistance,
@@ -182,7 +208,11 @@ public partial struct MoveEscapeFromZombiesSystem : ISystem
 
             ZombieHashMap = zombieHashMap,
             StaticCollidablesHashMap = staticCollidableHashMap,
-            DynamicCollidablesHashMap = dynamicCollidableHashMap
+            DynamicCollidablesHashMap = dynamicCollidableHashMap,
+
+            // LOS cache - read from existing cache, write new entries via parallel writer
+            LOSCacheRead = losCacheComponent.Cache,
+            LOSCacheWriter = losCacheComponent.Cache.AsParallelWriter(),
         }.ScheduleParallel(state.Dependency);
 
         zombieHashMap.Dispose(state.Dependency);

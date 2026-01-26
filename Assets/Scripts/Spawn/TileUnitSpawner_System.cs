@@ -50,7 +50,7 @@ public partial struct SpawnJob : IJobEntity
                         (TileUnitPositionsNativeList[i].x >= TileUnitPositionsNativeList[i].z ? TileUnitPositionsNativeList[i].x : TileUnitPositionsNativeList[i].z) / 10.0f - 0.1f
                     ));
                     // Road hierarchy-based color gradient
-                    float brightness = CityGridHelper.GetRoadBrightness(TileUnitRoadHierarchyNativeList[i]);
+                    var brightness = CityGridHelper.GetRoadBrightness(TileUnitRoadHierarchyNativeList[i]);
                     Ecb.AddComponent(entityIndexInQuery, instance, new URPMaterialPropertyBaseColor { Value = new float4(brightness, brightness, brightness, 1.0f) });
                     Ecb.AddComponent(entityIndexInQuery, instance, new RoadSurface());
                     break;
@@ -94,8 +94,9 @@ public partial struct TileUnitSpawner_System : ISystem
     [BurstCompile]
     public void OnCreate(ref SystemState state)
     {
+        state.RequireForUpdate<RunWorld>();
         _regenerateComponentsQuery = state.GetEntityQuery(new EntityQueryBuilder(Allocator.Temp)
-            .WithAny<GridPosition, RoadSurface, HashDynamicCollidableSystemComponent, HashStaticCollidableSystemComponent>());
+            .WithAny<GridPosition, RoadSurface, HashDynamicCollidableSystemComponent, HashStaticCollidableSystemComponent, LOSCacheComponent>());
 
         state.RequireForUpdate<SpawnWorld>();
         state.RequireForUpdate<TileUnitSpawner_Data>();
@@ -118,6 +119,10 @@ public partial struct TileUnitSpawner_System : ISystem
         var dynamicComponentEntity = state.EntityManager.CreateEntity();
         state.EntityManager.AddComponent(dynamicComponentEntity, ComponentType.ReadOnly<HashDynamicCollidableSystemComponent>());
 
+        // Create LOS cache singleton for caching line-of-sight calculations
+        var losCacheEntity = state.EntityManager.CreateEntity();
+        state.EntityManager.AddComponent(losCacheEntity, ComponentType.ReadWrite<LOSCacheComponent>());
+
         var gameControllerComponent = SystemAPI.GetSingleton<GameControllerComponent>();
 
         // Initialize seeded RNG (seed is guaranteed non-zero from UpdateGameControllerComponentSystem)
@@ -132,16 +137,32 @@ public partial struct TileUnitSpawner_System : ISystem
         var tileUnitHeights = new NativeList<byte>(Allocator.Temp);
         var tileUnitBuildingIds = new NativeList<ushort>(Allocator.Temp);
 
-        int gridSize = gameControllerComponent.numTilesY * gameControllerComponent.numTilesX;
+        var gridSize = gameControllerComponent.numTilesY * gameControllerComponent.numTilesX;
         var tileExists = new NativeArray<bool>(gridSize, Allocator.Temp);
         var roadHierarchy = new NativeArray<byte>(gridSize, Allocator.Temp);
         var regionIds = new NativeArray<ushort>(gridSize, Allocator.Temp);
         var buildingIds = new NativeArray<ushort>(gridSize, Allocator.Temp);
-        var buildingHeights = new NativeArray<byte>(gridSize, Allocator.Temp, NativeArrayOptions.ClearMemory);
+        var buildingHeights = new NativeArray<byte>(gridSize, Allocator.Temp);
 
         for (var y = 0; y < gameControllerComponent.numTilesY; y++)
             for (var x = 0; x < gameControllerComponent.numTilesX; x++)
                 tileExists[y * gameControllerComponent.numTilesX + x] = true;
+
+        // L-System arterial generation (before BSP)
+        if (gameControllerComponent.enableLSystemArterials)
+        {
+            LSystemArterialGenerator.GenerateArterials(
+                ref tileExists,
+                ref roadHierarchy,
+                gameControllerComponent.numTilesX,
+                gameControllerComponent.numTilesY,
+                gameControllerComponent.lSystemIterations,
+                gameControllerComponent.lSystemBranchAngle,
+                gameControllerComponent.lSystemSegmentLength,
+                gameControllerComponent.lSystemRoadWidth,
+                gameControllerComponent.lSystemNumSeeds,
+                ref rng);
+        }
 
         // BSP city generation
         var cityBlocks = new NativeList<CityBlock>(128, Allocator.Temp);
@@ -156,7 +177,10 @@ public partial struct TileUnitSpawner_System : ISystem
             gameControllerComponent.splitVariance,
             ref rng,
             ref cityBlocks,
-            ref roadSplits
+            ref roadSplits,
+            ref tileExists,
+            ref roadHierarchy,
+            gameControllerComponent.enableLSystemArterials
         );
 
         BSPCityGenerator.ApplyRoadsToGridWithHierarchy(
@@ -205,13 +229,29 @@ public partial struct TileUnitSpawner_System : ISystem
             ref rng
         );
 
+        // Alley generation (after templates, before disposal)
+        if (gameControllerComponent.enableAlleys)
+        {
+            AlleyGenerator.GenerateAlleys(
+                ref tileExists,
+                ref roadHierarchy,
+                gameControllerComponent.numTilesX,
+                gameControllerComponent.numTilesY,
+                ref regions,
+                ref regionIds,
+                gameControllerComponent.alleyMinRegionSize,
+                gameControllerComponent.alleyDeadEndProbability,
+                gameControllerComponent.alleyMaxLength,
+                ref rng);
+        }
+
         regions.Dispose();
 
         // Now add border walls - they're separate from building regions
         for (var y = 0; y < gameControllerComponent.numTilesY; y++)
         {
-            int leftIdx = y * gameControllerComponent.numTilesX;
-            int rightIdx = y * gameControllerComponent.numTilesX + gameControllerComponent.numTilesX - 1;
+            var leftIdx = y * gameControllerComponent.numTilesX;
+            var rightIdx = y * gameControllerComponent.numTilesX + gameControllerComponent.numTilesX - 1;
             tileExists[leftIdx] = true;
             tileExists[rightIdx] = true;
             buildingHeights[leftIdx] = 3; // Border walls are taller
@@ -219,8 +259,8 @@ public partial struct TileUnitSpawner_System : ISystem
         }
         for (var x = 0; x < gameControllerComponent.numTilesX; x++)
         {
-            int bottomIdx = x;
-            int topIdx = (gameControllerComponent.numTilesY - 1) * gameControllerComponent.numTilesX + x;
+            var bottomIdx = x;
+            var topIdx = (gameControllerComponent.numTilesY - 1) * gameControllerComponent.numTilesX + x;
             tileExists[bottomIdx] = true;
             tileExists[topIdx] = true;
             buildingHeights[bottomIdx] = 3;
@@ -232,7 +272,7 @@ public partial struct TileUnitSpawner_System : ISystem
         {
             for (var x = 0; x < gameControllerComponent.numTilesX; x++)
             {
-                int idx = y * gameControllerComponent.numTilesX + x;
+                var idx = y * gameControllerComponent.numTilesX + x;
                 if (!tileExists[idx])
                     continue;
 
@@ -299,7 +339,7 @@ public partial struct TileUnitSpawner_System : ISystem
 
         // Collect building mesh data for procedural generation (before disposing native arrays)
         var buildingMeshDataList = new System.Collections.Generic.List<BuildingMeshData>();
-        for (int i = 0; i < tileUnitKinds.Length; i++)
+        for (var i = 0; i < tileUnitKinds.Length; i++)
         {
             if (tileUnitKinds[i] == TileUnitKinds.BuildingTile)
             {

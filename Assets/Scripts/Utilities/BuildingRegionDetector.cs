@@ -50,18 +50,18 @@ public static class BuildingRegionDetector
         ref NativeList<BuildingRegion> regions)
     {
         // Initialize all region IDs to 0
-        for (int i = 0; i < regionIds.Length; i++)
+        for (var i = 0; i < regionIds.Length; i++)
             regionIds[i] = 0;
 
         ushort currentRegionId = 1;
         var cellQueue = new NativeList<int2>(256, Allocator.Temp);
         var regionCells = new NativeList<int2>(256, Allocator.Temp);
 
-        for (int y = 0; y < numTilesY; y++)
+        for (var y = 0; y < numTilesY; y++)
         {
-            for (int x = 0; x < numTilesX; x++)
+            for (var x = 0; x < numTilesX; x++)
             {
-                int idx = y * numTilesX + x;
+                var idx = y * numTilesX + x;
 
                 // Skip if not a building or already assigned
                 if (!tileExists[idx] || regionIds[idx] != 0)
@@ -72,16 +72,16 @@ public static class BuildingRegionDetector
                 cellQueue.Clear();
                 cellQueue.Add(new int2(x, y));
 
-                int2 boundsMin = new int2(x, y);
-                int2 boundsMax = new int2(x, y);
-                float2 centroidSum = float2.zero;
+                var boundsMin = new int2(x, y);
+                var boundsMax = new int2(x, y);
+                var centroidSum = float2.zero;
 
                 while (cellQueue.Length > 0)
                 {
                     var cell = cellQueue[cellQueue.Length - 1];
                     cellQueue.RemoveAt(cellQueue.Length - 1);
 
-                    int cellIdx = cell.y * numTilesX + cell.x;
+                    var cellIdx = cell.y * numTilesX + cell.x;
 
                     // Skip if out of bounds, not a building, or already visited
                     if (cell.x < 0 || cell.x >= numTilesX ||
@@ -156,9 +156,9 @@ public static class BuildingRegionDetector
         ref NativeList<int2> cells)
     {
         cells.Clear();
-        for (int y = 0; y < numTilesY; y++)
+        for (var y = 0; y < numTilesY; y++)
         {
-            for (int x = 0; x < numTilesX; x++)
+            for (var x = 0; x < numTilesX; x++)
             {
                 if (regionIds[y * numTilesX + x] == targetRegionId)
                     cells.Add(new int2(x, y));

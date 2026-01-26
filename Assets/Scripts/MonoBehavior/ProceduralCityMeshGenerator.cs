@@ -30,7 +30,7 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
         Instance = this;
     }
 
-    public void ClearCity()
+    private void ClearCity()
     {
         foreach (var obj in generatedObjects)
         {
@@ -79,7 +79,7 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
         // Batch buildings with same ID together, but limit batch size for mesh vertex limits
         const int maxVerticesPerMesh = 60000; // Stay under 65535 limit
         const int verticesPerCube = 24;
-        int maxBuildingsPerBatch = maxVerticesPerMesh / verticesPerCube;
+        var maxBuildingsPerBatch = maxVerticesPerMesh / verticesPerCube;
 
         var allBuildings = new List<BuildingMeshData>();
         foreach (var group in buildingGroups.Values)
@@ -88,10 +88,10 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
         }
 
         // Create batched meshes
-        int batchIndex = 0;
-        for (int i = 0; i < allBuildings.Count; i += maxBuildingsPerBatch)
+        var batchIndex = 0;
+        for (var i = 0; i < allBuildings.Count; i += maxBuildingsPerBatch)
         {
-            int count = Mathf.Min(maxBuildingsPerBatch, allBuildings.Count - i);
+            var count = Mathf.Min(maxBuildingsPerBatch, allBuildings.Count - i);
             var batch = allBuildings.GetRange(i, count);
             var mesh = GenerateBatchedMesh(batch, 1.0f);
             var obj = CreateMeshObject($"CityBuildings_{batchIndex}", mesh, buildingMaterial);
@@ -102,27 +102,27 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
 
     private Mesh GenerateBatchedMesh(List<BuildingMeshData> buildings, float baseHeight)
     {
-        int buildingCount = buildings.Count;
-        int vertexCount = buildingCount * 24; // 6 faces * 4 vertices
-        int triangleCount = buildingCount * 36; // 6 faces * 2 triangles * 3 indices
+        var buildingCount = buildings.Count;
+        var vertexCount = buildingCount * 24; // 6 faces * 4 vertices
+        var triangleCount = buildingCount * 36; // 6 faces * 2 triangles * 3 indices
 
         var vertices = new Vector3[vertexCount];
         var normals = new Vector3[vertexCount];
         var colors = new Color32[vertexCount];
         var triangles = new int[triangleCount];
 
-        int vertexIndex = 0;
-        int triangleIndex = 0;
+        var vertexIndex = 0;
+        var triangleIndex = 0;
 
         foreach (var building in buildings)
         {
             // Height multiplier of 1.0 makes each height level add 1 unit of height
-            float height = baseHeight + building.Height * 1.0f;
+            var height = baseHeight + building.Height * 1.0f;
             float x = building.X;
             float z = building.Z;
 
             // Calculate color based on height (lighter = taller for better visibility from above)
-            byte colorValue = (byte)math.clamp(60 + building.Height * 20, 60, 200);
+            var colorValue = (byte)math.clamp(60 + building.Height * 20, 60, 200);
             var color = new Color32(colorValue, colorValue, colorValue, 255);
 
             // Generate cube vertices
@@ -131,12 +131,14 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
                 x, z, height, color);
         }
 
-        var mesh = new Mesh();
-        mesh.indexFormat = vertexCount > 65535 ? IndexFormat.UInt32 : IndexFormat.UInt16;
-        mesh.vertices = vertices;
-        mesh.normals = normals;
-        mesh.colors32 = colors;
-        mesh.triangles = triangles;
+        var mesh = new Mesh
+        {
+            indexFormat = vertexCount > 65535 ? IndexFormat.UInt32 : IndexFormat.UInt16,
+            vertices = vertices,
+            normals = normals,
+            colors32 = colors,
+            triangles = triangles
+        };
         mesh.RecalculateBounds();
 
         return mesh;
@@ -146,11 +148,9 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
         ref int vertexIndex, ref int triangleIndex,
         float x, float z, float height, Color32 color)
     {
-        float y = height / 2f + 0.5f; // Center the cube vertically, offset by 0.5 to sit on ground
-        float halfWidth = 0.5f;
-        float halfHeight = height / 2f;
-
-        int startVertex = vertexIndex;
+        var y = height / 2f + 0.5f; // Center the cube vertically, offset by 0.5 to sit on ground
+        var halfWidth = 0.5f;
+        var halfHeight = height / 2f;
 
         // Front face (Z+)
         vertices[vertexIndex] = new Vector3(x - halfWidth, y - halfHeight, z + halfWidth);
@@ -225,9 +225,9 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
         triangles[triangleIndex++] = vertexStart + 3;
     }
 
-    private GameObject CreateMeshObject(string name, Mesh mesh, Material material)
+    private GameObject CreateMeshObject(string objName, Mesh mesh, Material material)
     {
-        var obj = new GameObject(name);
+        var obj = new GameObject(objName);
         obj.transform.SetParent(transform);
 
         var meshFilter = obj.AddComponent<MeshFilter>();

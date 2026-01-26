@@ -43,7 +43,7 @@ public static class BuildingTemplates
         ushort currentBuildingId = 1;
         var regionCells = new NativeList<int2>(256, Allocator.Temp);
 
-        for (int i = 0; i < regions.Length; i++)
+        for (var i = 0; i < regions.Length; i++)
         {
             var region = regions[i];
             BuildingRegionDetector.GetRegionCells(ref regionIds, numTilesX, numTilesY, region.RegionId, ref regionCells);
@@ -133,7 +133,7 @@ public static class BuildingTemplates
                 }
 
             case RegionSize.Large:
-                float roll = rng.NextFloat();
+                var roll = rng.NextFloat();
                 // 30% chance for L-shape
                 if (roll < 0.3f)
                 {
@@ -201,7 +201,7 @@ public static class BuildingTemplates
         ref Random rng)
     {
         // Calculate building height (taller buildings near region center)
-        byte buildingHeight = (byte)(template.BaseHeight + rng.NextInt(0, template.MaxExtraHeight + 1));
+        var buildingHeight = (byte)(template.BaseHeight + rng.NextInt(0, template.MaxExtraHeight + 1));
 
         // For complex templates, we might carve courtyards or create patterns
         switch (template.Type)
@@ -237,10 +237,10 @@ public static class BuildingTemplates
         ushort buildingId,
         byte buildingHeight)
     {
-        for (int i = 0; i < regionCells.Length; i++)
+        for (var i = 0; i < regionCells.Length; i++)
         {
             var cell = regionCells[i];
-            int idx = cell.y * numTilesX + cell.x;
+            var idx = cell.y * numTilesX + cell.x;
             buildingIds[idx] = buildingId;
             heights[idx] = buildingHeight;
         }
@@ -259,10 +259,10 @@ public static class BuildingTemplates
         ref Random rng)
     {
         // U-shape: carve out center and one side to create actual U with opening
-        int courtyardStartX = region.BoundsMin.x + 1;
-        int courtyardEndX = region.BoundsMax.x - 1;
-        int courtyardStartY = region.BoundsMin.y + 1;
-        int courtyardEndY = region.BoundsMax.y - 1;
+        var courtyardStartX = region.BoundsMin.x + 1;
+        var courtyardEndX = region.BoundsMax.x - 1;
+        var courtyardStartY = region.BoundsMin.y + 1;
+        var courtyardEndY = region.BoundsMax.y - 1;
 
         // Only create courtyard if we have room
         if (courtyardEndX <= courtyardStartX || courtyardEndY <= courtyardStartY)
@@ -272,19 +272,19 @@ public static class BuildingTemplates
         }
 
         // Randomly choose which side is open (0=bottom, 1=top, 2=left, 3=right)
-        int openSide = rng.NextInt(0, 4);
+        var openSide = rng.NextInt(0, 4);
 
-        for (int i = 0; i < regionCells.Length; i++)
+        for (var i = 0; i < regionCells.Length; i++)
         {
             var cell = regionCells[i];
-            int idx = cell.y * numTilesX + cell.x;
+            var idx = cell.y * numTilesX + cell.x;
 
             // Check if this cell is in the courtyard area (center)
-            bool isCourtyardCell = cell.x >= courtyardStartX && cell.x <= courtyardEndX &&
-                                   cell.y >= courtyardStartY && cell.y <= courtyardEndY;
+            var isCourtyardCell = cell.x >= courtyardStartX && cell.x <= courtyardEndX &&
+                                  cell.y >= courtyardStartY && cell.y <= courtyardEndY;
 
             // Check if this cell is in the open side passage (all cells between courtyard and building edge)
-            bool isOpenSideCell = openSide switch
+            var isOpenSideCell = openSide switch
             {
                 0 => cell.y < courtyardStartY && cell.x >= courtyardStartX && cell.x <= courtyardEndX, // Bottom open
                 1 => cell.y > courtyardEndY && cell.x >= courtyardStartX && cell.x <= courtyardEndX,   // Top open
@@ -320,18 +320,18 @@ public static class BuildingTemplates
         ref Random rng)
     {
         // L-shape: remove one corner quadrant
-        int midX = (region.BoundsMin.x + region.BoundsMax.x) / 2;
-        int midY = (region.BoundsMin.y + region.BoundsMax.y) / 2;
+        var midX = (region.BoundsMin.x + region.BoundsMax.x) / 2;
+        var midY = (region.BoundsMin.y + region.BoundsMax.y) / 2;
 
         // Randomly choose which corner to remove (0=TL, 1=TR, 2=BL, 3=BR)
-        int cornerToRemove = rng.NextInt(0, 4);
+        var cornerToRemove = rng.NextInt(0, 4);
 
-        for (int i = 0; i < regionCells.Length; i++)
+        for (var i = 0; i < regionCells.Length; i++)
         {
             var cell = regionCells[i];
-            int idx = cell.y * numTilesX + cell.x;
+            var idx = cell.y * numTilesX + cell.x;
 
-            bool removeCell = cornerToRemove switch
+            var removeCell = cornerToRemove switch
             {
                 0 => cell.x < midX && cell.y > midY, // Top-left
                 1 => cell.x > midX && cell.y > midY, // Top-right
@@ -366,35 +366,35 @@ public static class BuildingTemplates
         ref Random rng)
     {
         // Create a central courtyard in a rectangular building with an entrance
-        int width = region.Width;
-        int height = region.Height;
+        var width = region.Width;
+        var height = region.Height;
 
         // Courtyard size (at least 1 cell in each dimension if building is big enough)
-        int courtyardWidth = math.max(1, (width - 2) / 2);
-        int courtyardHeight = math.max(1, (height - 2) / 2);
+        var courtyardWidth = math.max(1, (width - 2) / 2);
+        var courtyardHeight = math.max(1, (height - 2) / 2);
 
-        int courtyardStartX = region.BoundsMin.x + (width - courtyardWidth) / 2;
-        int courtyardEndX = courtyardStartX + courtyardWidth - 1;
-        int courtyardStartY = region.BoundsMin.y + (height - courtyardHeight) / 2;
-        int courtyardEndY = courtyardStartY + courtyardHeight - 1;
+        var courtyardStartX = region.BoundsMin.x + (width - courtyardWidth) / 2;
+        var courtyardEndX = courtyardStartX + courtyardWidth - 1;
+        var courtyardStartY = region.BoundsMin.y + (height - courtyardHeight) / 2;
+        var courtyardEndY = courtyardStartY + courtyardHeight - 1;
 
         // Calculate entrance position (middle of chosen side, extending from courtyard to building edge)
         // Entrance is 2-3 cells wide for better access
-        int openSide = rng.NextInt(0, 4);
-        int entranceMidX = (courtyardStartX + courtyardEndX) / 2;
-        int entranceMidY = (courtyardStartY + courtyardEndY) / 2;
-        int entranceHalfWidth = math.max(1, math.min(courtyardWidth / 2, 1)); // At least 1 cell on each side of center
+        var openSide = rng.NextInt(0, 4);
+        var entranceMidX = (courtyardStartX + courtyardEndX) / 2;
+        var entranceMidY = (courtyardStartY + courtyardEndY) / 2;
+        var entranceHalfWidth = math.max(1, math.min(courtyardWidth / 2, 1)); // At least 1 cell on each side of center
 
-        for (int i = 0; i < regionCells.Length; i++)
+        for (var i = 0; i < regionCells.Length; i++)
         {
             var cell = regionCells[i];
-            int idx = cell.y * numTilesX + cell.x;
+            var idx = cell.y * numTilesX + cell.x;
 
-            bool isCourtyardCell = cell.x >= courtyardStartX && cell.x <= courtyardEndX &&
-                                   cell.y >= courtyardStartY && cell.y <= courtyardEndY;
+            var isCourtyardCell = cell.x >= courtyardStartX && cell.x <= courtyardEndX &&
+                                  cell.y >= courtyardStartY && cell.y <= courtyardEndY;
 
             // Check if this cell is part of the entrance passage (2-3 cells wide)
-            bool isEntranceCell = openSide switch
+            var isEntranceCell = openSide switch
             {
                 0 => cell.x >= entranceMidX - entranceHalfWidth && cell.x <= entranceMidX + entranceHalfWidth &&
                      cell.y < courtyardStartY && cell.y >= region.BoundsMin.y, // Bottom entrance

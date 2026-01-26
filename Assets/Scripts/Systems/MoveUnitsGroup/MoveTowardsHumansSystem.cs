@@ -1,5 +1,6 @@
 ﻿using Unity.Burst;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
@@ -18,6 +19,14 @@ public partial struct MoveTowardsHumansJob : IJobEntity
     [ReadOnly] public NativeParallelMultiHashMap<uint, int3> AudibleHashMap;
     [ReadOnly] public NativeParallelHashMap<uint, int> StaticCollidablesHashMap;
     [ReadOnly] public NativeParallelHashMap<uint, int> DynamicCollidablesHashMap;
+
+    // LOS cache for avoiding redundant line-of-sight calculations
+    // NativeDisableContainerSafetyRestriction is safe here because:
+    // - TryGetValue is a read-only operation
+    // - TryAdd uses atomic operations and is thread-safe for concurrent writes
+    [ReadOnly] public NativeParallelHashMap<ulong, byte> LOSCacheRead;
+    [NativeDisableContainerSafetyRestriction]
+    public NativeParallelHashMap<ulong, byte>.ParallelWriter LOSCacheWriter;
 
     public void Execute([EntityIndexInQuery] int entityIndexInQuery, ref DesiredNextGridPosition desiredNextGridPosition, ref RandomGenerator random, [ReadOnly] in GridPosition gridPosition)
     {
@@ -55,8 +64,21 @@ public partial struct MoveTowardsHumansJob : IJobEntity
                         if (checkDist > VisionDistance || !HumanHashMap.TryGetValue(targetKey, out _))
                             continue;
 
-                        // Check if we have line of sight to the target
-                        if (!LineOfSightUtilities.InLineOfSightUpdated(myGridPositionValue, targetGridPosition, StaticCollidablesHashMap))
+                        // Check LOS cache first, compute and cache if miss
+                        var losKey = GridPositionHash.GetLOSKey(myGridPositionValue.x, myGridPositionValue.z, targetGridPosition.x, targetGridPosition.z);
+                        bool hasLOS;
+                        if (LOSCacheRead.TryGetValue(losKey, out var cachedLOS))
+                        {
+                            hasLOS = cachedLOS == 1;
+                        }
+                        else
+                        {
+                            hasLOS = LineOfSightUtilities.InLineOfSightUpdated(myGridPositionValue, targetGridPosition, StaticCollidablesHashMap);
+                            // Cache the result (TryAdd is safe from parallel writes - duplicates are ignored)
+                            LOSCacheWriter.TryAdd(losKey, hasLOS ? (byte)1 : (byte)0);
+                        }
+
+                        if (!hasLOS)
                             continue;
 
                         var distance = math.lengthsq(new float3(myGridPositionValue) - new float3(targetGridPosition));
@@ -328,6 +350,7 @@ public partial struct MoveTowardsHumansSystem : ISystem
         state.RequireForUpdate<HashStaticCollidableSystemComponent>();
         state.RequireForUpdate<HashDynamicCollidableSystemComponent>();
         state.RequireForUpdate<GameControllerComponent>();
+        state.RequireForUpdate<LOSCacheComponent>();
         state.RequireForUpdate(_moveTowardsHumanQuery);
         state.RequireAnyForUpdate(_humanQuery, _audibleQuery);
     }
@@ -377,16 +400,19 @@ public partial struct MoveTowardsHumansSystem : ISystem
             }.ScheduleParallel(_audibleQuery, state.Dependency);
         }
 
-        state.Dependency = JobHandle.CombineDependencies(
-            state.Dependency,
-            hashFollowTargetGridPositionsJobHandle,
-            hashFollowTargetVisionJobHandle
-        );
-        state.Dependency = JobHandle.CombineDependencies(
-            state.Dependency,
-            hashAudiblesJobHandle,
-            hashHearingJobHandle
-        );
+        // Combine all hashing job handles before scheduling the main job
+        // Use NativeArray overload to combine more than 3 handles at once
+        var hashJobHandles = new NativeArray<JobHandle>(5, Allocator.Temp);
+        hashJobHandles[0] = state.Dependency;
+        hashJobHandles[1] = hashFollowTargetGridPositionsJobHandle;
+        hashJobHandles[2] = hashFollowTargetVisionJobHandle;
+        hashJobHandles[3] = hashAudiblesJobHandle;
+        hashJobHandles[4] = hashHearingJobHandle;
+        state.Dependency = JobHandle.CombineDependencies(hashJobHandles);
+        hashJobHandles.Dispose();
+
+        // Get LOS cache for this frame
+        var losCacheComponent = SystemAPI.GetSingleton<LOSCacheComponent>();
 
         state.Dependency = new MoveTowardsHumansJob
         {
@@ -402,6 +428,10 @@ public partial struct MoveTowardsHumansSystem : ISystem
             AudibleHashMap = audibleHashMap,
             StaticCollidablesHashMap = staticCollidableComponent.HashMap,
             DynamicCollidablesHashMap = dynamicCollidableComponent.HashMap,
+
+            // LOS cache - read from existing cache, write new entries via parallel writer
+            LOSCacheRead = losCacheComponent.Cache,
+            LOSCacheWriter = losCacheComponent.Cache.AsParallelWriter(),
         }.ScheduleParallel(_moveTowardsHumanQuery, state.Dependency);
 
         zombieHearingHashMap.Dispose(state.Dependency);

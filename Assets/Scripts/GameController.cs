@@ -13,10 +13,24 @@ public class GameController : MonoBehaviour
 
     public uint citySeed = 0;  // 0 = random seed from time
 
-    // BSP config (Inspector only)
-    public int minBlockSize = 15;
-    public int maxBlockSize = 40;
+    // BSP config (fills gaps between L-System arterials)
+    public int minBlockSize = 12;
+    public int maxBlockSize = 35;
     public float splitVariance = 0.2f;
+
+    [Header("L-System Arterial Roads")]
+    public bool enableLSystemArterials = true;
+    public int lSystemIterations = 2;
+    public float lSystemBranchAngle = 45f;
+    public float lSystemSegmentLength = 20f;
+    public int lSystemRoadWidth = 5;
+    public int lSystemNumSeeds = 4;
+
+    [Header("Alley Generation")]
+    public bool enableAlleys = true;
+    public int alleyMinRegionSize = 25;
+    public float alleyDeadEndProbability = 0.3f;
+    public int alleyMaxLength = 12;
 
     public int numHumans = 1000;
     public int humanStartingHealth = 100;

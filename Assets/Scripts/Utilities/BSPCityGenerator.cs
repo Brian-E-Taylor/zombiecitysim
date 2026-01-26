@@ -26,6 +26,32 @@ public static class BSPCityGenerator
         public byte Depth;
     }
 
+    /// <summary>
+    /// Generates city blocks using BSP, optionally respecting pre-marked arterial roads.
+    /// </summary>
+    public static void GenerateBlocks(
+        int numTilesX,
+        int numTilesY,
+        int borderSize,
+        int minBlockSize,
+        int maxBlockSize,
+        float splitVariance,
+        ref Random rng,
+        ref NativeList<CityBlock> cityBlocks,
+        ref NativeList<RoadSplit> roadSplits,
+        ref NativeArray<bool> tileExists,
+        ref NativeArray<byte> roadHierarchy,
+        bool respectArterials = true)
+    {
+        GenerateBlocksInternal(
+            numTilesX, numTilesY, borderSize, minBlockSize, maxBlockSize, splitVariance,
+            ref rng, ref cityBlocks, ref roadSplits,
+            ref tileExists, ref roadHierarchy, respectArterials);
+    }
+
+    /// <summary>
+    /// Legacy overload without arterial awareness for backwards compatibility.
+    /// </summary>
     public static void GenerateBlocks(
         int numTilesX,
         int numTilesY,
@@ -36,6 +62,33 @@ public static class BSPCityGenerator
         ref Random rng,
         ref NativeList<CityBlock> cityBlocks,
         ref NativeList<RoadSplit> roadSplits)
+    {
+        // Create empty arrays for legacy compatibility
+        var emptyTileExists = new NativeArray<bool>(0, Allocator.Temp);
+        var emptyRoadHierarchy = new NativeArray<byte>(0, Allocator.Temp);
+
+        GenerateBlocksInternal(
+            numTilesX, numTilesY, borderSize, minBlockSize, maxBlockSize, splitVariance,
+            ref rng, ref cityBlocks, ref roadSplits,
+            ref emptyTileExists, ref emptyRoadHierarchy, false);
+
+        emptyTileExists.Dispose();
+        emptyRoadHierarchy.Dispose();
+    }
+
+    private static void GenerateBlocksInternal(
+        int numTilesX,
+        int numTilesY,
+        int borderSize,
+        int minBlockSize,
+        int maxBlockSize,
+        float splitVariance,
+        ref Random rng,
+        ref NativeList<CityBlock> cityBlocks,
+        ref NativeList<RoadSplit> roadSplits,
+        ref NativeArray<bool> tileExists,
+        ref NativeArray<byte> roadHierarchy,
+        bool respectArterials)
     {
         var nodeStack = new NativeList<BSPNode>(64, Allocator.Temp);
 
@@ -51,20 +104,20 @@ public static class BSPCityGenerator
 
         while (nodeStack.Length > 0)
         {
-            var node = nodeStack[nodeStack.Length - 1];
+            var node = nodeStack[^1];
             nodeStack.RemoveAt(nodeStack.Length - 1);
 
-            int width = node.Max.x - node.Min.x + 1;
-            int height = node.Max.y - node.Min.y + 1;
+            var width = node.Max.x - node.Min.x + 1;
+            var height = node.Max.y - node.Min.y + 1;
 
             // Calculate road width for this depth
-            int roadWidth = CalculateRoadWidth(node.Depth);
+            var roadWidth = CalculateRoadWidth(node.Depth);
 
             // Check if we should split
-            bool canSplitHorizontally = height >= minBlockSize * 2 + roadWidth;
-            bool canSplitVertically = width >= minBlockSize * 2 + roadWidth;
+            var canSplitHorizontally = height >= minBlockSize * 2 + roadWidth;
+            var canSplitVertically = width >= minBlockSize * 2 + roadWidth;
 
-            bool shouldSplit = width > maxBlockSize || height > maxBlockSize;
+            var shouldSplit = width > maxBlockSize || height > maxBlockSize;
 
             if (!shouldSplit && !canSplitHorizontally && !canSplitVertically)
             {
@@ -111,18 +164,45 @@ public static class BSPCityGenerator
             }
 
             // Calculate split position with variance
-            int dimension = splitHorizontal ? height : width;
-            int midPoint = dimension / 2;
-            int variance = (int)(midPoint * splitVariance);
-            int splitOffset = rng.NextInt(-variance, variance + 1);
-            int splitPos = midPoint + splitOffset;
+            var dimension = splitHorizontal ? height : width;
+            var midPoint = dimension / 2;
+            var variance = (int)(midPoint * splitVariance);
+            var splitOffset = rng.NextInt(-variance, variance + 1);
+            var splitPos = midPoint + splitOffset;
 
             // Ensure minimum block sizes are respected
             splitPos = math.clamp(splitPos, minBlockSize, dimension - minBlockSize - roadWidth);
 
+            // Check for arterial overlap if enabled
+            if (respectArterials && roadHierarchy.Length > 0)
+            {
+                var overlapRatio = LSystemArterialGenerator.GetArterialOverlapRatio(
+                    ref tileExists,
+                    ref roadHierarchy,
+                    numTilesX,
+                    splitHorizontal,
+                    splitHorizontal ? node.Min.y + splitPos : node.Min.x + splitPos,
+                    splitHorizontal ? node.Min.x : node.Min.y,
+                    splitHorizontal ? node.Max.x : node.Max.y,
+                    roadWidth);
+
+                // Skip this split if > 30% overlaps with arterials
+                if (overlapRatio > 0.3f)
+                {
+                    // Create leaf block instead
+                    cityBlocks.Add(new CityBlock
+                    {
+                        Min = node.Min,
+                        Max = node.Max,
+                        BlockId = blockId++
+                    });
+                    continue;
+                }
+            }
+
             if (splitHorizontal)
             {
-                int splitY = node.Min.y + splitPos;
+                var splitY = node.Min.y + splitPos;
 
                 // Add the road split
                 roadSplits.Add(new RoadSplit
@@ -151,7 +231,7 @@ public static class BSPCityGenerator
             }
             else
             {
-                int splitX = node.Min.x + splitPos;
+                var splitX = node.Min.x + splitPos;
 
                 // Add the road split
                 roadSplits.Add(new RoadSplit
@@ -189,18 +269,16 @@ public static class BSPCityGenerator
         int numTilesY,
         ref NativeList<RoadSplit> roadSplits)
     {
-        for (int i = 0; i < roadSplits.Length; i++)
+        foreach (var split in roadSplits)
         {
-            var split = roadSplits[i];
-
             if (split.IsHorizontal)
             {
-                for (int w = 0; w < split.Width; w++)
+                for (var w = 0; w < split.Width; w++)
                 {
-                    int y = split.Position + w;
+                    var y = split.Position + w;
                     if (y < 1 || y >= numTilesY - 1) continue;
 
-                    for (int x = split.Start; x <= split.End; x++)
+                    for (var x = split.Start; x <= split.End; x++)
                     {
                         if (x < 1 || x >= numTilesX - 1) continue;
                         tileExists[y * numTilesX + x] = false;
@@ -209,12 +287,12 @@ public static class BSPCityGenerator
             }
             else
             {
-                for (int w = 0; w < split.Width; w++)
+                for (var w = 0; w < split.Width; w++)
                 {
-                    int x = split.Position + w;
+                    var x = split.Position + w;
                     if (x < 1 || x >= numTilesX - 1) continue;
 
-                    for (int y = split.Start; y <= split.End; y++)
+                    for (var y = split.Start; y <= split.End; y++)
                     {
                         if (y < 1 || y >= numTilesY - 1) continue;
                         tileExists[y * numTilesX + x] = false;
@@ -231,22 +309,21 @@ public static class BSPCityGenerator
         int numTilesY,
         ref NativeList<RoadSplit> roadSplits)
     {
-        for (int i = 0; i < roadSplits.Length; i++)
+        foreach (var split in roadSplits)
         {
-            var split = roadSplits[i];
-            byte hierarchy = GetRoadHierarchyLevel(split.Depth);
+            var hierarchy = GetRoadHierarchyLevel(split.Depth);
 
             if (split.IsHorizontal)
             {
-                for (int w = 0; w < split.Width; w++)
+                for (var w = 0; w < split.Width; w++)
                 {
-                    int y = split.Position + w;
+                    var y = split.Position + w;
                     if (y < 1 || y >= numTilesY - 1) continue;
 
-                    for (int x = split.Start; x <= split.End; x++)
+                    for (var x = split.Start; x <= split.End; x++)
                     {
                         if (x < 1 || x >= numTilesX - 1) continue;
-                        int idx = y * numTilesX + x;
+                        var idx = y * numTilesX + x;
                         tileExists[idx] = false;
                         // Keep the higher hierarchy (lower value = more important)
                         if (roadHierarchy[idx] == 0 || hierarchy < roadHierarchy[idx])
@@ -256,15 +333,15 @@ public static class BSPCityGenerator
             }
             else
             {
-                for (int w = 0; w < split.Width; w++)
+                for (var w = 0; w < split.Width; w++)
                 {
-                    int x = split.Position + w;
+                    var x = split.Position + w;
                     if (x < 1 || x >= numTilesX - 1) continue;
 
-                    for (int y = split.Start; y <= split.End; y++)
+                    for (var y = split.Start; y <= split.End; y++)
                     {
                         if (y < 1 || y >= numTilesY - 1) continue;
-                        int idx = y * numTilesX + x;
+                        var idx = y * numTilesX + x;
                         tileExists[idx] = false;
                         // Keep the higher hierarchy (lower value = more important)
                         if (roadHierarchy[idx] == 0 || hierarchy < roadHierarchy[idx])
@@ -283,7 +360,6 @@ public static class BSPCityGenerator
             0 => 5,
             1 => 4,
             2 => 4,
-            3 => 3,
             _ => 3
         };
     }
