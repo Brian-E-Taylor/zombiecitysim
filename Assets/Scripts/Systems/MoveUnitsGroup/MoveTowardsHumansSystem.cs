@@ -336,6 +336,14 @@ public partial struct MoveTowardsHumansSystem : ISystem
     private EntityQuery _humanQuery;
     private EntityQuery _audibleQuery;
 
+    // Pooled hash maps to avoid per-frame allocations
+    private NativeParallelHashMap<uint, int> _humanHashMap;
+    private NativeParallelHashMap<uint, int> _zombieVisionHashMap;
+    private NativeParallelMultiHashMap<uint, int3> _audibleHashMap;
+    private NativeParallelHashMap<uint, int> _zombieHearingHashMap;
+
+    private const int InitialPoolCapacity = 256;
+
     public void OnCreate(ref SystemState state)
     {
         _moveTowardsHumanQuery = state.GetEntityQuery(new EntityQueryBuilder(Allocator.Temp)
@@ -344,6 +352,12 @@ public partial struct MoveTowardsHumansSystem : ISystem
         );
         _humanQuery = state.GetEntityQuery(new EntityQueryBuilder(Allocator.Temp).WithAll<Human, GridPosition>());
         _audibleQuery = state.GetEntityQuery(new EntityQueryBuilder(Allocator.Temp).WithAll<Audible>());
+
+        // Initialize pooled hash maps
+        _humanHashMap = new NativeParallelHashMap<uint, int>(InitialPoolCapacity, Allocator.Persistent);
+        _zombieVisionHashMap = new NativeParallelHashMap<uint, int>(InitialPoolCapacity, Allocator.Persistent);
+        _audibleHashMap = new NativeParallelMultiHashMap<uint, int3>(InitialPoolCapacity, Allocator.Persistent);
+        _zombieHearingHashMap = new NativeParallelHashMap<uint, int>(InitialPoolCapacity, Allocator.Persistent);
 
         state.RequireForUpdate<RunWorld>();
         state.RequireForUpdate<BeginInitializationEntityCommandBufferSystem.Singleton>();
@@ -367,36 +381,52 @@ public partial struct MoveTowardsHumansSystem : ISystem
         var cellSize = gameControllerComponent.zombieVisionDistance * 2 + 1;
         var cellCount = math.asint(math.ceil((float)gameControllerComponent.numTilesX / cellSize * gameControllerComponent.numTilesY / cellSize));
         var humanCount = _humanQuery.CalculateEntityCount();
-        var humanHashMap = new NativeParallelHashMap<uint, int>(humanCount, Allocator.TempJob);
-        var zombieVisionHashMap = new NativeParallelHashMap<uint, int>(cellCount < humanCount ? cellCount : humanCount, Allocator.TempJob);
+
+        // Clear and resize pooled hash maps instead of recreating
+        _humanHashMap.Clear();
+        if (_humanHashMap.Capacity < humanCount)
+            _humanHashMap.Capacity = (int)(humanCount * 1.2f);
+
+        var visionMapCapacity = cellCount < humanCount ? cellCount : humanCount;
+        _zombieVisionHashMap.Clear();
+        if (_zombieVisionHashMap.Capacity < visionMapCapacity)
+            _zombieVisionHashMap.Capacity = (int)(visionMapCapacity * 1.2f);
 
         var hashFollowTargetGridPositionsJobHandle = state.Dependency;
         var hashFollowTargetVisionJobHandle = state.Dependency;
         if (humanCount > 0)
         {
-            hashFollowTargetGridPositionsJobHandle = new HashGridPositionsJob { ParallelWriter = humanHashMap.AsParallelWriter() }.ScheduleParallel(_humanQuery, state.Dependency);
+            hashFollowTargetGridPositionsJobHandle = new HashGridPositionsJob { ParallelWriter = _humanHashMap.AsParallelWriter() }.ScheduleParallel(_humanQuery, state.Dependency);
             hashFollowTargetVisionJobHandle = new HashGridPositionsCellJob
             {
                 CellSize = cellSize,
-                ParallelWriter = zombieVisionHashMap.AsParallelWriter()
+                ParallelWriter = _zombieVisionHashMap.AsParallelWriter()
             }.ScheduleParallel(_humanQuery, state.Dependency);
         }
 
         cellSize = gameControllerComponent.zombieHearingDistance * 2 + 1;
         cellCount = math.asint(math.ceil((float)gameControllerComponent.numTilesX / cellSize * gameControllerComponent.numTilesY / cellSize));
         var audibleCount = _audibleQuery.CalculateEntityCount();
-        var audibleHashMap = new NativeParallelMultiHashMap<uint, int3>(audibleCount, Allocator.TempJob);
-        var zombieHearingHashMap = new NativeParallelHashMap<uint, int>(cellCount < audibleCount ? cellCount : audibleCount, Allocator.TempJob);
+
+        // Clear and resize pooled hash maps
+        _audibleHashMap.Clear();
+        if (_audibleHashMap.Capacity < audibleCount)
+            _audibleHashMap.Capacity = (int)(audibleCount * 1.2f);
+
+        var hearingMapCapacity = cellCount < audibleCount ? cellCount : audibleCount;
+        _zombieHearingHashMap.Clear();
+        if (_zombieHearingHashMap.Capacity < hearingMapCapacity)
+            _zombieHearingHashMap.Capacity = (int)(hearingMapCapacity * 1.2f);
 
         var hashAudiblesJobHandle = state.Dependency;
         var hashHearingJobHandle = state.Dependency;
         if (audibleCount > 0)
         {
-            hashAudiblesJobHandle = new HashAudiblesJob { ParallelWriter = audibleHashMap.AsParallelWriter() }.ScheduleParallel(_audibleQuery, state.Dependency);
+            hashAudiblesJobHandle = new HashAudiblesJob { ParallelWriter = _audibleHashMap.AsParallelWriter() }.ScheduleParallel(_audibleQuery, state.Dependency);
             hashHearingJobHandle = new HashAudiblesCellJob
             {
                 CellSize = cellSize,
-                ParallelWriter = zombieHearingHashMap.AsParallelWriter()
+                ParallelWriter = _zombieHearingHashMap.AsParallelWriter()
             }.ScheduleParallel(_audibleQuery, state.Dependency);
         }
 
@@ -420,12 +450,12 @@ public partial struct MoveTowardsHumansSystem : ISystem
                 .CreateCommandBuffer(state.WorldUnmanaged).AsParallelWriter(),
 
             HearingDistance = gameControllerComponent.zombieHearingDistance,
-            ZombieHearingHashMap = zombieHearingHashMap,
+            ZombieHearingHashMap = _zombieHearingHashMap,
             VisionDistance = gameControllerComponent.zombieVisionDistance,
-            ZombieVisionHashMap = zombieVisionHashMap,
+            ZombieVisionHashMap = _zombieVisionHashMap,
 
-            HumanHashMap = humanHashMap,
-            AudibleHashMap = audibleHashMap,
+            HumanHashMap = _humanHashMap,
+            AudibleHashMap = _audibleHashMap,
             StaticCollidablesHashMap = staticCollidableComponent.HashMap,
             DynamicCollidablesHashMap = dynamicCollidableComponent.HashMap,
 
@@ -434,10 +464,14 @@ public partial struct MoveTowardsHumansSystem : ISystem
             LOSCacheWriter = losCacheComponent.Cache.AsParallelWriter(),
         }.ScheduleParallel(_moveTowardsHumanQuery, state.Dependency);
 
-        zombieHearingHashMap.Dispose(state.Dependency);
-        zombieVisionHashMap.Dispose(state.Dependency);
+        // No need to dispose - using pooled hash maps
+    }
 
-        humanHashMap.Dispose(state.Dependency);
-        audibleHashMap.Dispose(state.Dependency);
+    public void OnDestroy(ref SystemState state)
+    {
+        if (_humanHashMap.IsCreated) _humanHashMap.Dispose();
+        if (_zombieVisionHashMap.IsCreated) _zombieVisionHashMap.Dispose();
+        if (_audibleHashMap.IsCreated) _audibleHashMap.Dispose();
+        if (_zombieHearingHashMap.IsCreated) _zombieHearingHashMap.Dispose();
     }
 }

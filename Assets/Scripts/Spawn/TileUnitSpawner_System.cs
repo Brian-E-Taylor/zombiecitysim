@@ -94,7 +94,6 @@ public partial struct TileUnitSpawner_System : ISystem
     [BurstCompile]
     public void OnCreate(ref SystemState state)
     {
-        state.RequireForUpdate<RunWorld>();
         _regenerateComponentsQuery = state.GetEntityQuery(new EntityQueryBuilder(Allocator.Temp)
             .WithAny<GridPosition, RoadSurface, HashDynamicCollidableSystemComponent, HashStaticCollidableSystemComponent, LOSCacheComponent>());
 
@@ -107,8 +106,9 @@ public partial struct TileUnitSpawner_System : ISystem
     // Note: Not Burst-compiled because we need to call managed code (ProceduralCityMeshGenerator)
     public void OnUpdate(ref SystemState state)
     {
-        if (SystemAPI.HasSingleton<RunWorld>())
-            state.EntityManager.DestroyEntity(SystemAPI.GetSingletonEntity<RunWorld>());
+        // Clean up RunWorld from previous run if it exists (e.g., when regenerating city)
+        if (SystemAPI.TryGetSingletonEntity<RunWorld>(out var runWorldEntity))
+            state.EntityManager.DestroyEntity(runWorldEntity);
 
         state.EntityManager.DestroyEntity(SystemAPI.GetSingletonEntity<SpawnWorld>());
         state.EntityManager.DestroyEntity(_regenerateComponentsQuery);

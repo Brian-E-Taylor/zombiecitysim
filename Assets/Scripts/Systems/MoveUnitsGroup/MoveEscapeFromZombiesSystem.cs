@@ -148,10 +148,19 @@ public partial struct MoveEscapeFromZombiesSystem : ISystem
 {
     private EntityQuery _zombieQuery;
 
-    [BurstCompile]
+    // Pooled hash maps to avoid per-frame allocations
+    private NativeParallelHashMap<uint, int> _zombieHashMap;
+    private NativeParallelHashMap<uint, int> _humanVisionHashMap;
+
+    private const int InitialPoolCapacity = 256;
+
     public void OnCreate(ref SystemState state)
     {
         _zombieQuery = state.GetEntityQuery(new EntityQueryBuilder(Allocator.Temp).WithAll<Zombie, GridPosition>());
+
+        // Initialize pooled hash maps
+        _zombieHashMap = new NativeParallelHashMap<uint, int>(InitialPoolCapacity, Allocator.Persistent);
+        _humanVisionHashMap = new NativeParallelHashMap<uint, int>(InitialPoolCapacity, Allocator.Persistent);
 
         state.RequireForUpdate<RunWorld>();
         state.RequireForUpdate<HashStaticCollidableSystemComponent>();
@@ -180,16 +189,26 @@ public partial struct MoveEscapeFromZombiesSystem : ISystem
             return;
 
         var zombieCount = _zombieQuery.CalculateEntityCount();
-        var zombieHashMap = new NativeParallelHashMap<uint, int>(zombieCount, Allocator.TempJob);
-        var hashMoveEscapeTargetGridPositionsJobHandle = new HashGridPositionsJob { ParallelWriter = zombieHashMap.AsParallelWriter() }.ScheduleParallel(_zombieQuery, state.Dependency);
+
+        // Clear and resize pooled hash maps instead of recreating
+        _zombieHashMap.Clear();
+        if (_zombieHashMap.Capacity < zombieCount)
+            _zombieHashMap.Capacity = (int)(zombieCount * 1.2f);
+
+        var hashMoveEscapeTargetGridPositionsJobHandle = new HashGridPositionsJob { ParallelWriter = _zombieHashMap.AsParallelWriter() }.ScheduleParallel(_zombieQuery, state.Dependency);
 
         var cellSize = gameControllerComponent.humanVisionDistance * 2 + 1;
         var cellCount = math.asint(math.ceil((float)gameControllerComponent.numTilesX / cellSize * gameControllerComponent.numTilesY / cellSize));
-        var humanVisionHashMap = new NativeParallelHashMap<uint, int>(cellCount < zombieCount ? cellCount: zombieCount, Allocator.TempJob);
+        var visionMapCapacity = cellCount < zombieCount ? cellCount : zombieCount;
+
+        _humanVisionHashMap.Clear();
+        if (_humanVisionHashMap.Capacity < visionMapCapacity)
+            _humanVisionHashMap.Capacity = (int)(visionMapCapacity * 1.2f);
+
         var hashMoveEscapeTargetVisionJobHandle = new HashGridPositionsCellJob
         {
             CellSize = gameControllerComponent.humanVisionDistance * 2 + 1,
-            ParallelWriter = humanVisionHashMap.AsParallelWriter()
+            ParallelWriter = _humanVisionHashMap.AsParallelWriter()
         }.ScheduleParallel(_zombieQuery, state.Dependency);
 
         state.Dependency = JobHandle.CombineDependencies(
@@ -204,9 +223,9 @@ public partial struct MoveEscapeFromZombiesSystem : ISystem
         state.Dependency = new MoveEscapeFromZombiesJob
         {
             VisionDistance = gameControllerComponent.humanVisionDistance,
-            HumanVisionHashMap = humanVisionHashMap,
+            HumanVisionHashMap = _humanVisionHashMap,
 
-            ZombieHashMap = zombieHashMap,
+            ZombieHashMap = _zombieHashMap,
             StaticCollidablesHashMap = staticCollidableHashMap,
             DynamicCollidablesHashMap = dynamicCollidableHashMap,
 
@@ -215,7 +234,12 @@ public partial struct MoveEscapeFromZombiesSystem : ISystem
             LOSCacheWriter = losCacheComponent.Cache.AsParallelWriter(),
         }.ScheduleParallel(state.Dependency);
 
-        zombieHashMap.Dispose(state.Dependency);
-        humanVisionHashMap.Dispose(state.Dependency);
+        // No need to dispose - using pooled hash maps
+    }
+
+    public void OnDestroy(ref SystemState state)
+    {
+        if (_zombieHashMap.IsCreated) _zombieHashMap.Dispose();
+        if (_humanVisionHashMap.IsCreated) _humanVisionHashMap.Dispose();
     }
 }

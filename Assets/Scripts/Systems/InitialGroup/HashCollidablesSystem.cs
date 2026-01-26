@@ -103,12 +103,18 @@ public partial struct HashCollidablesSystem : ISystem
 
     public void OnDestroy(ref SystemState state)
     {
-        var staticCollidableHashMap = SystemAPI.GetSingleton<HashStaticCollidableSystemComponent>().HashMap;
-        if (staticCollidableHashMap.IsCreated)
-            staticCollidableHashMap.Dispose();
+        if (SystemAPI.HasSingleton<HashStaticCollidableSystemComponent>())
+        {
+            var staticCollidableHashMap = SystemAPI.GetSingleton<HashStaticCollidableSystemComponent>().HashMap;
+            if (staticCollidableHashMap.IsCreated)
+                staticCollidableHashMap.Dispose();
+        }
 
-        var dynamicCollidableHashMap = SystemAPI.GetSingleton<HashDynamicCollidableSystemComponent>().HashMap;
-        if (dynamicCollidableHashMap.IsCreated)
-            dynamicCollidableHashMap.Dispose();
+        if (SystemAPI.HasSingleton<HashDynamicCollidableSystemComponent>())
+        {
+            var dynamicCollidableHashMap = SystemAPI.GetSingleton<HashDynamicCollidableSystemComponent>().HashMap;
+            if (dynamicCollidableHashMap.IsCreated)
+                dynamicCollidableHashMap.Dispose();
+        }
     }
 }

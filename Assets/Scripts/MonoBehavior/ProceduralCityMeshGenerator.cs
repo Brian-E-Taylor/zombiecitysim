@@ -18,6 +18,10 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
     [SerializeField] private Material buildingMaterial;
     [SerializeField] private Material borderMaterial;
 
+    // Spatial grid cell size for frustum culling optimization
+    // Each cell becomes a separate mesh with tight bounds
+    private const int SpatialCellSize = 16;
+
     private List<GameObject> generatedObjects = new List<GameObject>();
 
     private void Awake()
@@ -47,8 +51,11 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
         if (buildings == null || buildings.Length == 0)
             return;
 
-        // Group buildings by their BuildingId for potential batching
-        var buildingGroups = new Dictionary<ushort, List<BuildingMeshData>>();
+        // Group buildings by spatial grid cells for efficient frustum culling
+        // Each cell gets its own mesh with tight bounds
+        var cellsX = (numTilesX + SpatialCellSize - 1) / SpatialCellSize;
+        var cellsZ = (numTilesY + SpatialCellSize - 1) / SpatialCellSize;
+        var spatialCells = new Dictionary<int, List<BuildingMeshData>>();
         var borderBuildings = new List<BuildingMeshData>();
 
         foreach (var building in buildings)
@@ -61,9 +68,14 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
             }
             else
             {
-                if (!buildingGroups.ContainsKey(building.BuildingId))
-                    buildingGroups[building.BuildingId] = new List<BuildingMeshData>();
-                buildingGroups[building.BuildingId].Add(building);
+                // Assign to spatial cell based on position
+                var cellX = building.X / SpatialCellSize;
+                var cellZ = building.Z / SpatialCellSize;
+                var cellKey = cellZ * cellsX + cellX;
+
+                if (!spatialCells.ContainsKey(cellKey))
+                    spatialCells[cellKey] = new List<BuildingMeshData>();
+                spatialCells[cellKey].Add(building);
             }
         }
 
@@ -75,28 +87,33 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
             generatedObjects.Add(borderObj);
         }
 
-        // Generate meshes for building groups
-        // Batch buildings with same ID together, but limit batch size for mesh vertex limits
+        // Generate meshes for each spatial cell
+        // This enables efficient frustum culling as each mesh has tight bounds
         const int maxVerticesPerMesh = 60000; // Stay under 65535 limit
         const int verticesPerCube = 24;
         var maxBuildingsPerBatch = maxVerticesPerMesh / verticesPerCube;
 
-        var allBuildings = new List<BuildingMeshData>();
-        foreach (var group in buildingGroups.Values)
+        foreach (var kvp in spatialCells)
         {
-            allBuildings.AddRange(group);
-        }
+            var cellKey = kvp.Key;
+            var cellBuildings = kvp.Value;
+            var cellX = cellKey % cellsX;
+            var cellZ = cellKey / cellsX;
 
-        // Create batched meshes
-        var batchIndex = 0;
-        for (var i = 0; i < allBuildings.Count; i += maxBuildingsPerBatch)
-        {
-            var count = Mathf.Min(maxBuildingsPerBatch, allBuildings.Count - i);
-            var batch = allBuildings.GetRange(i, count);
-            var mesh = GenerateBatchedMesh(batch, 1.0f);
-            var obj = CreateMeshObject($"CityBuildings_{batchIndex}", mesh, buildingMaterial);
-            generatedObjects.Add(obj);
-            batchIndex++;
+            // Split large cells into multiple meshes if needed
+            var batchIndex = 0;
+            for (var i = 0; i < cellBuildings.Count; i += maxBuildingsPerBatch)
+            {
+                var count = Mathf.Min(maxBuildingsPerBatch, cellBuildings.Count - i);
+                var batch = cellBuildings.GetRange(i, count);
+                var mesh = GenerateBatchedMesh(batch, 1.0f);
+                var objName = batchIndex == 0
+                    ? $"CityCell_{cellX}_{cellZ}"
+                    : $"CityCell_{cellX}_{cellZ}_{batchIndex}";
+                var obj = CreateMeshObject(objName, mesh, buildingMaterial);
+                generatedObjects.Add(obj);
+                batchIndex++;
+            }
         }
     }
 
