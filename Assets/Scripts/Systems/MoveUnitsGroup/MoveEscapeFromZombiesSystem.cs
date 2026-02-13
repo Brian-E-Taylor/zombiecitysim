@@ -41,7 +41,7 @@ public partial struct MoveEscapeFromZombiesJob : IJobEntity
         {
             foundTarget = false;
 
-            for (var checkDist = 1; checkDist <= VisionDistance && !foundTarget; checkDist++)
+            for (var checkDist = 1; checkDist <= VisionDistance; checkDist++)
             {
                 for (var z = -checkDist; z <= checkDist; z++)
                 {
@@ -148,8 +148,7 @@ public partial struct MoveEscapeFromZombiesSystem : ISystem
 {
     private EntityQuery _zombieQuery;
 
-    // Pooled hash maps to avoid per-frame allocations
-    private NativeParallelHashMap<uint, int> _zombieHashMap;
+    // Pooled hash map for vision cell lookups (zombie positions come from shared HashZombiePositionsComponent)
     private NativeParallelHashMap<uint, int> _humanVisionHashMap;
 
     private const int InitialPoolCapacity = 256;
@@ -158,8 +157,6 @@ public partial struct MoveEscapeFromZombiesSystem : ISystem
     {
         _zombieQuery = state.GetEntityQuery(new EntityQueryBuilder(Allocator.Temp).WithAll<Zombie, GridPosition>());
 
-        // Initialize pooled hash maps
-        _zombieHashMap = new NativeParallelHashMap<uint, int>(InitialPoolCapacity, Allocator.Persistent);
         _humanVisionHashMap = new NativeParallelHashMap<uint, int>(InitialPoolCapacity, Allocator.Persistent);
 
         state.RequireForUpdate<RunWorld>();
@@ -167,6 +164,7 @@ public partial struct MoveEscapeFromZombiesSystem : ISystem
         state.RequireForUpdate<HashDynamicCollidableSystemComponent>();
         state.RequireForUpdate<GameControllerComponent>();
         state.RequireForUpdate<LOSCacheComponent>();
+        state.RequireForUpdate<HashZombiePositionsComponent>();
     }
 
     [BurstCompile]
@@ -175,12 +173,14 @@ public partial struct MoveEscapeFromZombiesSystem : ISystem
         var staticCollidableComponent = SystemAPI.GetSingleton<HashStaticCollidableSystemComponent>();
         var dynamicCollidableComponent = SystemAPI.GetSingleton<HashDynamicCollidableSystemComponent>();
         var gameControllerComponent = SystemAPI.GetSingleton<GameControllerComponent>();
+        var zombiePositionsComponent = SystemAPI.GetSingleton<HashZombiePositionsComponent>();
 
         state.Dependency = JobHandle.CombineDependencies(
             state.Dependency,
-            SystemAPI.GetSingleton<HashStaticCollidableSystemComponent>().Handle,
-            SystemAPI.GetSingleton<HashDynamicCollidableSystemComponent>().Handle
+            staticCollidableComponent.Handle,
+            dynamicCollidableComponent.Handle
         );
+        state.Dependency = JobHandle.CombineDependencies(state.Dependency, zombiePositionsComponent.Handle);
 
         var staticCollidableHashMap = staticCollidableComponent.HashMap;
         var dynamicCollidableHashMap = dynamicCollidableComponent.HashMap;
@@ -189,13 +189,6 @@ public partial struct MoveEscapeFromZombiesSystem : ISystem
             return;
 
         var zombieCount = _zombieQuery.CalculateEntityCount();
-
-        // Clear and resize pooled hash maps instead of recreating
-        _zombieHashMap.Clear();
-        if (_zombieHashMap.Capacity < zombieCount)
-            _zombieHashMap.Capacity = (int)(zombieCount * 1.2f);
-
-        var hashMoveEscapeTargetGridPositionsJobHandle = new HashGridPositionsJob { ParallelWriter = _zombieHashMap.AsParallelWriter() }.ScheduleParallel(_zombieQuery, state.Dependency);
 
         var cellSize = gameControllerComponent.humanVisionDistance * 2 + 1;
         var cellCount = math.asint(math.ceil((float)gameControllerComponent.numTilesX / cellSize * gameControllerComponent.numTilesY / cellSize));
@@ -207,13 +200,12 @@ public partial struct MoveEscapeFromZombiesSystem : ISystem
 
         var hashMoveEscapeTargetVisionJobHandle = new HashGridPositionsCellJob
         {
-            CellSize = gameControllerComponent.humanVisionDistance * 2 + 1,
+            CellSize = cellSize,
             ParallelWriter = _humanVisionHashMap.AsParallelWriter()
         }.ScheduleParallel(_zombieQuery, state.Dependency);
 
         state.Dependency = JobHandle.CombineDependencies(
             state.Dependency,
-            hashMoveEscapeTargetGridPositionsJobHandle,
             hashMoveEscapeTargetVisionJobHandle
         );
 
@@ -225,7 +217,7 @@ public partial struct MoveEscapeFromZombiesSystem : ISystem
             VisionDistance = gameControllerComponent.humanVisionDistance,
             HumanVisionHashMap = _humanVisionHashMap,
 
-            ZombieHashMap = _zombieHashMap,
+            ZombieHashMap = zombiePositionsComponent.HashMap,
             StaticCollidablesHashMap = staticCollidableHashMap,
             DynamicCollidablesHashMap = dynamicCollidableHashMap,
 
@@ -233,13 +225,10 @@ public partial struct MoveEscapeFromZombiesSystem : ISystem
             LOSCacheRead = losCacheComponent.Cache,
             LOSCacheWriter = losCacheComponent.Cache.AsParallelWriter(),
         }.ScheduleParallel(state.Dependency);
-
-        // No need to dispose - using pooled hash maps
     }
 
     public void OnDestroy(ref SystemState state)
     {
-        if (_zombieHashMap.IsCreated) _zombieHashMap.Dispose();
         if (_humanVisionHashMap.IsCreated) _humanVisionHashMap.Dispose();
     }
 }

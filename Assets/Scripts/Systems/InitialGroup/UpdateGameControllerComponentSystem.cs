@@ -51,7 +51,7 @@ public struct GameControllerComponent : IComponentData
 
 [BurstCompile]
 [UpdateInGroup(typeof(InitializationSystemGroup))]
-[UpdateBefore(typeof(TileUnitSpawner_System))]
+[UpdateBefore(typeof(TileUnitSpawnerSystem))]
 [RequireMatchingQueriesForUpdate]
 public partial class UpdateGameControllerComponentSystem : SystemBase
 {

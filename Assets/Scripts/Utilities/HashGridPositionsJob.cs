@@ -1,7 +1,6 @@
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
-using Unity.Mathematics;
 
 [BurstCompile]
 public partial struct HashGridPositionsJob : IJobEntity

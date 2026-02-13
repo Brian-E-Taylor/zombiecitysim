@@ -22,7 +22,7 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
     // Each cell becomes a separate mesh with tight bounds
     private const int SpatialCellSize = 16;
 
-    private List<GameObject> generatedObjects = new List<GameObject>();
+    private readonly List<GameObject> _generatedObjects = new();
 
     private void Awake()
     {
@@ -36,12 +36,12 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
 
     private void ClearCity()
     {
-        foreach (var obj in generatedObjects)
+        foreach (var obj in _generatedObjects)
         {
             if (obj != null)
                 Destroy(obj);
         }
-        generatedObjects.Clear();
+        _generatedObjects.Clear();
     }
 
     public void GenerateCityMesh(BuildingMeshData[] buildings, int numTilesX, int numTilesY)
@@ -84,19 +84,17 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
         {
             var borderMesh = GenerateBatchedMesh(borderBuildings, 2.0f); // Border is taller
             var borderObj = CreateMeshObject("CityBorder", borderMesh, borderMaterial ?? buildingMaterial);
-            generatedObjects.Add(borderObj);
+            _generatedObjects.Add(borderObj);
         }
 
         // Generate meshes for each spatial cell
         // This enables efficient frustum culling as each mesh has tight bounds
         const int maxVerticesPerMesh = 60000; // Stay under 65535 limit
-        const int verticesPerCube = 24;
-        var maxBuildingsPerBatch = maxVerticesPerMesh / verticesPerCube;
+        const int verticesPerCube = 20; // 5 faces (no bottom)
+        const int maxBuildingsPerBatch = maxVerticesPerMesh / verticesPerCube;
 
-        foreach (var kvp in spatialCells)
+        foreach (var (cellKey, cellBuildings) in spatialCells)
         {
-            var cellKey = kvp.Key;
-            var cellBuildings = kvp.Value;
             var cellX = cellKey % cellsX;
             var cellZ = cellKey / cellsX;
 
@@ -111,7 +109,7 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
                     ? $"CityCell_{cellX}_{cellZ}"
                     : $"CityCell_{cellX}_{cellZ}_{batchIndex}";
                 var obj = CreateMeshObject(objName, mesh, buildingMaterial);
-                generatedObjects.Add(obj);
+                _generatedObjects.Add(obj);
                 batchIndex++;
             }
         }
@@ -120,8 +118,8 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
     private Mesh GenerateBatchedMesh(List<BuildingMeshData> buildings, float baseHeight)
     {
         var buildingCount = buildings.Count;
-        var vertexCount = buildingCount * 24; // 6 faces * 4 vertices
-        var triangleCount = buildingCount * 36; // 6 faces * 2 triangles * 3 indices
+        var vertexCount = buildingCount * 20; // 5 faces * 4 vertices (no bottom)
+        var triangleCount = buildingCount * 30; // 5 faces * 2 triangles * 3 indices (no bottom)
 
         var vertices = new Vector3[vertexCount];
         var normals = new Vector3[vertexCount];
@@ -166,7 +164,7 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
         float x, float z, float height, Color32 color)
     {
         var y = height / 2f + 0.5f; // Center the cube vertically, offset by 0.5 to sit on ground
-        var halfWidth = 0.5f;
+        const float halfWidth = 0.5f;
         var halfHeight = height / 2f;
 
         // Front face (Z+)
@@ -215,16 +213,6 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
         vertices[vertexIndex + 2] = new Vector3(x + halfWidth, y + halfHeight, z - halfWidth);
         vertices[vertexIndex + 3] = new Vector3(x - halfWidth, y + halfHeight, z - halfWidth);
         normals[vertexIndex] = normals[vertexIndex + 1] = normals[vertexIndex + 2] = normals[vertexIndex + 3] = Vector3.up;
-        colors[vertexIndex] = colors[vertexIndex + 1] = colors[vertexIndex + 2] = colors[vertexIndex + 3] = color;
-        AddQuadTriangles(triangles, ref triangleIndex, vertexIndex);
-        vertexIndex += 4;
-
-        // Bottom face (Y-)
-        vertices[vertexIndex] = new Vector3(x - halfWidth, y - halfHeight, z - halfWidth);
-        vertices[vertexIndex + 1] = new Vector3(x + halfWidth, y - halfHeight, z - halfWidth);
-        vertices[vertexIndex + 2] = new Vector3(x + halfWidth, y - halfHeight, z + halfWidth);
-        vertices[vertexIndex + 3] = new Vector3(x - halfWidth, y - halfHeight, z + halfWidth);
-        normals[vertexIndex] = normals[vertexIndex + 1] = normals[vertexIndex + 2] = normals[vertexIndex + 3] = Vector3.down;
         colors[vertexIndex] = colors[vertexIndex + 1] = colors[vertexIndex + 2] = colors[vertexIndex + 3] = color;
         AddQuadTriangles(triangles, ref triangleIndex, vertexIndex);
         vertexIndex += 4;

@@ -23,14 +23,18 @@ public static class GridPositionHash
 
     /// <summary>
     /// Encodes a source-target position pair into a unique ulong key for LOS caching.
-    /// Combines two grid positions (source and target) into a single 64-bit key.
+    /// The key is symmetric: GetLOSKey(A, B) == GetLOSKey(B, A), since line-of-sight
+    /// traverses the same cells in both directions. The smaller key is always placed
+    /// in the lower 32 bits to ensure this symmetry.
     /// </summary>
     [BurstCompile]
     public static ulong GetLOSKey(int sourceX, int sourceZ, int targetX, int targetZ)
     {
-        // Pack source position in lower 32 bits, target position in upper 32 bits
-        var sourceKey = GetKey(sourceX, sourceZ);
-        var targetKey = GetKey(targetX, targetZ);
-        return (ulong)sourceKey | ((ulong)targetKey << 32);
+        var keyA = GetKey(sourceX, sourceZ);
+        var keyB = GetKey(targetX, targetZ);
+        // Normalize ordering so (A→B) and (B→A) produce the same key
+        var lo = math.min(keyA, keyB);
+        var hi = math.max(keyA, keyB);
+        return (ulong)lo | ((ulong)hi << 32);
     }
 }

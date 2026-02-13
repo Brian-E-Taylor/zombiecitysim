@@ -86,16 +86,23 @@ public partial struct HashCollidablesSystem : ISystem
         var dynamicCollidableCount = _dynamicCollidableEntityQuery.CalculateEntityCount();
         if (dynamicCollidableCount != 0)
         {
-            if (SystemAPI.GetSingletonRW<HashDynamicCollidableSystemComponent>().ValueRO.HashMap.IsCreated)
-                SystemAPI.GetSingletonRW<HashDynamicCollidableSystemComponent>().ValueRW.HashMap.Dispose();
+            var existingDynamicHashMap = hashDynamicCollidableSystemComponent.ValueRO.HashMap;
+            if (!existingDynamicHashMap.IsCreated)
+            {
+                hashDynamicCollidableSystemComponent.ValueRW.HashMap =
+                    new NativeParallelHashMap<uint, int>(dynamicCollidableCount, Allocator.Persistent);
+            }
+            else
+            {
+                hashDynamicCollidableSystemComponent.ValueRW.HashMap.Clear();
+                if (existingDynamicHashMap.Capacity < dynamicCollidableCount)
+                    hashDynamicCollidableSystemComponent.ValueRW.HashMap.Capacity = (int)(dynamicCollidableCount * 1.2f);
+            }
 
-            var hashMap = new NativeParallelHashMap<uint, int>(dynamicCollidableCount, Allocator.Persistent);
             hashDynamicCollidableSystemComponent.ValueRW.Handle = new HashGridPositionsJob
             {
-                ParallelWriter = hashMap.AsParallelWriter()
+                ParallelWriter = hashDynamicCollidableSystemComponent.ValueRO.HashMap.AsParallelWriter()
             }.ScheduleParallel(_dynamicCollidableEntityQuery, state.Dependency);
-
-            SystemAPI.GetSingletonRW<HashDynamicCollidableSystemComponent>().ValueRW.HashMap = hashMap;
         }
 
         state.Dependency = JobHandle.CombineDependencies(hashStaticCollidableSystemComponent.ValueRO.Handle, hashDynamicCollidableSystemComponent.ValueRO.Handle);

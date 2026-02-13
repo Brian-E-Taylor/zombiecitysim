@@ -87,7 +87,7 @@ public partial struct SpawnJob : IJobEntity
 
 [UpdateInGroup(typeof(InitializationSystemGroup))]
 [RequireMatchingQueriesForUpdate]
-public partial struct TileUnitSpawner_System : ISystem
+public partial struct TileUnitSpawnerSystem : ISystem
 {
     private EntityQuery _regenerateComponentsQuery;
 
@@ -95,7 +95,7 @@ public partial struct TileUnitSpawner_System : ISystem
     public void OnCreate(ref SystemState state)
     {
         _regenerateComponentsQuery = state.GetEntityQuery(new EntityQueryBuilder(Allocator.Temp)
-            .WithAny<GridPosition, RoadSurface, HashDynamicCollidableSystemComponent, HashStaticCollidableSystemComponent, LOSCacheComponent>());
+            .WithAny<GridPosition, RoadSurface, HashDynamicCollidableSystemComponent, HashStaticCollidableSystemComponent, LOSCacheComponent, HashHumanPositionsComponent, HashZombiePositionsComponent>());
 
         state.RequireForUpdate<SpawnWorld>();
         state.RequireForUpdate<TileUnitSpawner_Data>();
@@ -122,6 +122,13 @@ public partial struct TileUnitSpawner_System : ISystem
         // Create LOS cache singleton for caching line-of-sight calculations
         var losCacheEntity = state.EntityManager.CreateEntity();
         state.EntityManager.AddComponent(losCacheEntity, ComponentType.ReadWrite<LOSCacheComponent>());
+
+        // Create shared unit position hash map singletons
+        var humanHashEntity = state.EntityManager.CreateEntity();
+        state.EntityManager.AddComponent(humanHashEntity, ComponentType.ReadWrite<HashHumanPositionsComponent>());
+
+        var zombieHashEntity = state.EntityManager.CreateEntity();
+        state.EntityManager.AddComponent(zombieHashEntity, ComponentType.ReadWrite<HashZombiePositionsComponent>());
 
         var gameControllerComponent = SystemAPI.GetSingleton<GameControllerComponent>();
 
