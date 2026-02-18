@@ -87,53 +87,29 @@ public partial struct MoveEscapeFromZombiesJob : IJobEntity
             averageTarget /= targetCount;
             var direction = new int3((int)-averageTarget.x, (int)averageTarget.y, (int)-averageTarget.z);
 
-            // Check if space is already occupied
-            var moveLeftKey = GridPositionHash.GetKey(myGridPositionValue.x - 1, myGridPositionValue.z);
-            var moveRightKey = GridPositionHash.GetKey(myGridPositionValue.x + 1, myGridPositionValue.z);
-            var moveDownKey = GridPositionHash.GetKey(myGridPositionValue.x, myGridPositionValue.z - 1);
-            var moveUpKey = GridPositionHash.GetKey(myGridPositionValue.x, myGridPositionValue.z + 1);
+            MovementResolution.ComputeDirectionKeys(myGridPositionValue, out var moveUpKey, out var moveRightKey, out var moveDownKey, out var moveLeftKey);
+
+            var upAvail = true;    var upChecked = false;
+            var rightAvail = true;  var rightChecked = false;
+            var downAvail = true;   var downChecked = false;
+            var leftAvail = true;   var leftChecked = false;
+
+            // Try primary axis (X only when it's the dominant direction)
             if (math.abs(direction.x) >= math.abs(direction.z))
             {
-                // Move horizontally
-                if (direction.x < 0)
-                {
-                    if (!StaticCollidablesHashMap.TryGetValue(moveLeftKey, out _) &&
-                        !DynamicCollidablesHashMap.TryGetValue(moveLeftKey, out _))
-                    {
-                        myGridPositionValue.x--;
-                        moved = true;
-                    }
-                }
-                else
-                {
-                    if (!StaticCollidablesHashMap.TryGetValue(moveRightKey, out _) &&
-                        !DynamicCollidablesHashMap.TryGetValue(moveRightKey, out _))
-                    {
-                        myGridPositionValue.x++;
-                        moved = true;
-                    }
-                }
+                moved = MovementResolution.TryMoveOnAxis(ref myGridPositionValue, direction.x, true,
+                    moveLeftKey, moveRightKey,
+                    ref leftAvail, ref rightAvail, ref leftChecked, ref rightChecked,
+                    StaticCollidablesHashMap, DynamicCollidablesHashMap);
             }
-            // Unit maybe wanted to move horizontally but couldn't, so check if it wants to move vertically
+
+            // Try secondary axis (Z)
             if (!moved)
             {
-                // Move vertically
-                if (direction.z < 0)
-                {
-                    if (!StaticCollidablesHashMap.TryGetValue(moveDownKey, out _) &&
-                        !DynamicCollidablesHashMap.TryGetValue(moveDownKey, out _))
-                    {
-                        myGridPositionValue.z--;
-                    }
-                }
-                else
-                {
-                    if (!StaticCollidablesHashMap.TryGetValue(moveUpKey, out _) &&
-                        !DynamicCollidablesHashMap.TryGetValue(moveUpKey, out _))
-                    {
-                        myGridPositionValue.z++;
-                    }
-                }
+                MovementResolution.TryMoveOnAxis(ref myGridPositionValue, direction.z, false,
+                    moveDownKey, moveUpKey,
+                    ref downAvail, ref upAvail, ref downChecked, ref upChecked,
+                    StaticCollidablesHashMap, DynamicCollidablesHashMap);
             }
         }
 

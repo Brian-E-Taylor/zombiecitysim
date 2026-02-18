@@ -2,7 +2,6 @@
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
-using Unity.Mathematics;
 
 [BurstCompile]
 public partial struct MoveRandomlyJob : IJobEntity
@@ -12,65 +11,11 @@ public partial struct MoveRandomlyJob : IJobEntity
 
     public void Execute(ref DesiredNextGridPosition desiredNextGridPosition, ref RandomGenerator random, [ReadOnly] in GridPosition gridPosition)
     {
-        var myGridPositionValue = gridPosition.Value;
-
-        var upDirKey = GridPositionHash.GetKey(myGridPositionValue.x, myGridPositionValue.z + 1);
-        var rightDirKey = GridPositionHash.GetKey(myGridPositionValue.x + 1, myGridPositionValue.z);
-        var downDirKey = GridPositionHash.GetKey(myGridPositionValue.x, myGridPositionValue.z - 1);
-        var leftDirKey = GridPositionHash.GetKey(myGridPositionValue.x - 1, myGridPositionValue.z);
-
-        var upMoveAvail = true;
-        var rightMoveAvail = true;
-        var downMoveAvail = true;
-        var leftMoveAvail = true;
-
-        if (StaticCollidableHashMap.TryGetValue(upDirKey, out _) || DynamicCollidableHashMap.TryGetValue(upDirKey, out _))
-            upMoveAvail = false;
-        if (StaticCollidableHashMap.TryGetValue(rightDirKey, out _) || DynamicCollidableHashMap.TryGetValue(rightDirKey, out _))
-            rightMoveAvail = false;
-        if (StaticCollidableHashMap.TryGetValue(downDirKey, out _) || DynamicCollidableHashMap.TryGetValue(downDirKey, out _))
-            downMoveAvail = false;
-        if (StaticCollidableHashMap.TryGetValue(leftDirKey, out _) || DynamicCollidableHashMap.TryGetValue(leftDirKey, out _))
-            leftMoveAvail = false;
-
-        var randomDirIndex = random.Value.NextInt(0, 4);
-        var moved = false;
-        for (var i = 0; i < 4 && !moved; i++)
-        {
-            var direction = (randomDirIndex + i) % 4;
-            switch (direction)
-            {
-                case 0:
-                    if (upMoveAvail)
-                    {
-                        myGridPositionValue.z += 1;
-                        moved = true;
-                    }
-                    break;
-                case 1:
-                    if (rightMoveAvail)
-                    {
-                        myGridPositionValue.x += 1;
-                        moved = true;
-                    }
-                    break;
-                case 2:
-                    if (downMoveAvail)
-                    {
-                        myGridPositionValue.z -= 1;
-                        moved = true;
-                    }
-                    break;
-                case 3:
-                    if (leftMoveAvail)
-                    {
-                        myGridPositionValue.x -= 1;
-                        moved = true;
-                    }
-                    break;
-            }
-        }
-        desiredNextGridPosition = new DesiredNextGridPosition { Value = myGridPositionValue };
+        var rng = random.Value;
+        var pos = gridPosition.Value;
+        MovementResolution.MoveRandomly(ref pos, ref rng, StaticCollidableHashMap, DynamicCollidableHashMap);
+        desiredNextGridPosition = new DesiredNextGridPosition { Value = pos };
+        random.Value = rng;
     }
 }
 

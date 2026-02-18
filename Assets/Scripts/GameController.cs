@@ -118,7 +118,8 @@ public class GameController : MonoBehaviour
 
     public void SetNumHumansInputField(string num)
     {
-        numHumans = int.Parse(num);
+        if (!int.TryParse(num, out var parsed)) return;
+        numHumans = parsed;
         numHumansSlider.value = numHumans;
     }
 
@@ -130,7 +131,8 @@ public class GameController : MonoBehaviour
 
     public void SetNumZombiesInputField(string num)
     {
-        numZombies = int.Parse(num);
+        if (!int.TryParse(num, out var parsed)) return;
+        numZombies = parsed;
         numZombiesSlider.value = numZombies;
     }
 
@@ -142,17 +144,20 @@ public class GameController : MonoBehaviour
 
     public void SetNumTilesXInputField(string num)
     {
-        numTilesX = int.Parse(num);
+        if (int.TryParse(num, out var parsed))
+            numTilesX = parsed;
     }
 
     public void SetNumTilesYInputField(string num)
     {
-        numTilesY = int.Parse(num);
+        if (int.TryParse(num, out var parsed))
+            numTilesY = parsed;
     }
 
     public void SetCitySeedInputField(string num)
     {
-        citySeed = uint.Parse(num);
+        if (uint.TryParse(num, out var parsed))
+            citySeed = parsed;
     }
 
     public void OnRegeneratePressed()
@@ -163,22 +168,25 @@ public class GameController : MonoBehaviour
 
     public void SetHumanTurnDelay(string num)
     {
-        humanTurnDelay = int.Parse(num);
+        if (!int.TryParse(num, out var parsed)) return;
+        humanTurnDelay = parsed;
 
         CreateUpdateGameControllerComponentEntity();
     }
 
     public void SetZombieTurnDelay(string num)
     {
-        zombieTurnDelay = int.Parse(num);
+        if (!int.TryParse(num, out var parsed)) return;
+        zombieTurnDelay = parsed;
 
         CreateUpdateGameControllerComponentEntity();
     }
 
     public void SetTurnDelayTimeInputField(string num)
     {
-        turnDelayTime = float.Parse(num) / 1000;
-        turnDelayTimeSlider.value = float.Parse(num);
+        if (!float.TryParse(num, out var parsed)) return;
+        turnDelayTime = parsed / 1000;
+        turnDelayTimeSlider.value = parsed;
 
         CreateUpdateGameControllerComponentEntity();
     }

@@ -134,188 +134,33 @@ public partial struct MoveTowardsHumansJob : IJobEntity
             }
         }
 
-        var leftMoveAvail = true;
-        var leftMoveChecked = false;
-        var rightMoveAvail = true;
-        var rightMoveChecked = false;
-        var downMoveAvail = true;
-        var downMoveChecked = false;
-        var upMoveAvail = true;
-        var upMoveChecked = false;
+        var upAvail = true;    var upChecked = false;
+        var rightAvail = true;  var rightChecked = false;
+        var downAvail = true;   var downChecked = false;
+        var leftAvail = true;   var leftChecked = false;
 
-        var moveLeftKey = GridPositionHash.GetKey(myGridPositionValue.x - 1, myGridPositionValue.z);
-        var moveRightKey = GridPositionHash.GetKey(myGridPositionValue.x + 1, myGridPositionValue.z);
-        var moveDownKey = GridPositionHash.GetKey(myGridPositionValue.x, myGridPositionValue.z - 1);
-        var moveUpKey = GridPositionHash.GetKey(myGridPositionValue.x, myGridPositionValue.z + 1);
+        MovementResolution.ComputeDirectionKeys(myGridPositionValue, out var moveUpKey, out var moveRightKey, out var moveDownKey, out var moveLeftKey);
 
         if (foundTarget)
         {
             var direction = nearestTarget - myGridPositionValue;
-            if (math.abs(direction.x) >= math.abs(direction.z))
-            {
-                // Move horizontally
-                if (direction.x < 0)
-                {
-                    leftMoveChecked = true;
-                    if (StaticCollidablesHashMap.TryGetValue(moveLeftKey, out _) || DynamicCollidablesHashMap.TryGetValue(moveLeftKey, out _))
-                    {
-                        leftMoveAvail = false;
-                    }
-                    else
-                    {
-                        myGridPositionValue.x--;
-                        moved = true;
-                    }
-                }
-                else if (direction.x > 0)
-                {
-                    rightMoveChecked = true;
-                    if (StaticCollidablesHashMap.TryGetValue(moveRightKey, out _) || DynamicCollidablesHashMap.TryGetValue(moveRightKey, out _))
-                    {
-                        rightMoveAvail = false;
-                    }
-                    else
-                    {
-                        myGridPositionValue.x++;
-                        moved = true;
-                    }
-                }
-            }
-            // Unit maybe wanted to move horizontally but couldn't, so check if it wants to move vertically
-            if (!moved)
-            {
-                // Move vertically
-                if (direction.z < 0)
-                {
-                    downMoveChecked = true;
-                    if (StaticCollidablesHashMap.TryGetValue(moveDownKey, out _) || DynamicCollidablesHashMap.TryGetValue(moveDownKey, out _))
-                    {
-                        downMoveAvail = false;
-                    }
-                    else
-                    {
-                        myGridPositionValue.z--;
-                        moved = true;
-                    }
-                }
-                else if (direction.z > 0)
-                {
-                    upMoveChecked = true;
-                    if (StaticCollidablesHashMap.TryGetValue(moveUpKey, out _) || DynamicCollidablesHashMap.TryGetValue(moveUpKey, out _))
-                    {
-                        upMoveAvail = false;
-                    }
-                    else
-                    {
-                        myGridPositionValue.z++;
-                        moved = true;
-                    }
-                }
-
-                // Unit  wanted to move vertically but couldn't, so check if it wants to move horizontally
-                if (!moved)
-                {
-                    // Move horizontally
-                    if (direction.x < 0)
-                    {
-                        if (!leftMoveChecked)
-                        {
-                            leftMoveChecked = true;
-                            if (StaticCollidablesHashMap.TryGetValue(moveLeftKey, out _) || DynamicCollidablesHashMap.TryGetValue(moveLeftKey, out _))
-                                leftMoveAvail = false;
-                        }
-
-                        if (leftMoveAvail)
-                        {
-                            myGridPositionValue.x--;
-                            moved = true;
-                        }
-                    }
-                    else if (direction.x > 0)
-                    {
-                        if (!rightMoveChecked)
-                        {
-                            rightMoveChecked = true;
-                            if (StaticCollidablesHashMap.TryGetValue(moveRightKey, out _) || DynamicCollidablesHashMap.TryGetValue(moveRightKey, out _))
-                                rightMoveAvail = false;
-                        }
-
-                        if (rightMoveAvail)
-                        {
-                            myGridPositionValue.x++;
-                            moved = true;
-                        }
-                    }
-                }
-            }
-
-            // If a unit is close, set 'moved = true' so we don't move randomly
-            if ((math.abs(direction.x) == 1 && math.abs(direction.z) == 0) || math.abs(direction.x) == 0 && math.abs(direction.z) == 1)
-                moved = true;
+            moved = MovementResolution.TryMoveTowardsTarget(ref myGridPositionValue, direction,
+                moveUpKey, moveRightKey, moveDownKey, moveLeftKey,
+                ref upAvail, ref rightAvail, ref downAvail, ref leftAvail,
+                ref upChecked, ref rightChecked, ref downChecked, ref leftChecked,
+                StaticCollidablesHashMap, DynamicCollidablesHashMap,
+                out var adjacentToTarget) || adjacentToTarget;
         }
 
         if (!moved)
         {
-            var randomDirIndex = random.Value.NextInt(0, 4);
-            for (var i = 0; i < 4 && !moved; i++)
-            {
-                var direction = (randomDirIndex + i) % 4;
-                switch (direction)
-                {
-                    case 0:
-                        if (!upMoveChecked)
-                        {
-                            upMoveChecked = true;
-                            upMoveAvail = !(StaticCollidablesHashMap.TryGetValue(moveUpKey, out _) || DynamicCollidablesHashMap.TryGetValue(moveUpKey, out _));
-                        }
-
-                        if (upMoveAvail)
-                        {
-                            myGridPositionValue.z += 1;
-                            moved = true;
-                        }
-                        break;
-                    case 1:
-                        if (!rightMoveChecked)
-                        {
-                            rightMoveChecked = true;
-                            rightMoveAvail = !(StaticCollidablesHashMap.TryGetValue(moveRightKey, out _) || DynamicCollidablesHashMap.TryGetValue(moveRightKey, out _));
-                        }
-
-                        if (rightMoveAvail)
-                        {
-                            myGridPositionValue.x += 1;
-                            moved = true;
-                        }
-                        break;
-                    case 2:
-                        if (!downMoveChecked)
-                        {
-                            downMoveChecked = true;
-                            downMoveAvail = !(StaticCollidablesHashMap.TryGetValue(moveDownKey, out _) || DynamicCollidablesHashMap.TryGetValue(moveDownKey, out _));
-                        }
-
-                        if (downMoveAvail)
-                        {
-                            myGridPositionValue.z -= 1;
-                            moved = true;
-                        }
-                        break;
-                    case 3:
-                        if (!leftMoveChecked)
-                        {
-                            leftMoveChecked = true;
-                            leftMoveAvail = !(StaticCollidablesHashMap.TryGetValue(moveLeftKey, out _) || DynamicCollidablesHashMap.TryGetValue(moveLeftKey, out _));
-                        }
-
-                        if (leftMoveAvail)
-                        {
-                            myGridPositionValue.x -= 1;
-                            moved = true;
-                        }
-                        break;
-                }
-            }
+            var rng = random.Value;
+            MovementResolution.MoveRandomlyLazy(ref myGridPositionValue, ref rng,
+                moveUpKey, moveRightKey, moveDownKey, moveLeftKey,
+                ref upAvail, ref rightAvail, ref downAvail, ref leftAvail,
+                ref upChecked, ref rightChecked, ref downChecked, ref leftChecked,
+                StaticCollidablesHashMap, DynamicCollidablesHashMap);
+            random.Value = rng;
         }
 
         if (foundBySight)

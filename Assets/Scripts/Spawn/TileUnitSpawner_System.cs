@@ -302,20 +302,36 @@ public partial struct TileUnitSpawnerSystem : ISystem
         tileUnitHeights.Add(0);
         tileUnitBuildingIds.Add(0);
 
-        // Human Units
-        for (var i = 0; i < gameControllerComponent.numHumans; i++)
+        // Collect open interior positions for unit spawning
+        var openPositions = new NativeList<int2>(Allocator.Temp);
+        for (var y = 1; y < gameControllerComponent.numTilesY - 1; y++)
         {
-            int xPos, yPos;
-
-            do
+            for (var x = 1; x < gameControllerComponent.numTilesX - 1; x++)
             {
-                xPos = rng.NextInt(1, gameControllerComponent.numTilesX - 1);
-                yPos = rng.NextInt(1, gameControllerComponent.numTilesY - 1);
-            } while (tileExists[yPos * gameControllerComponent.numTilesX + xPos]);
+                if (!tileExists[y * gameControllerComponent.numTilesX + x])
+                    openPositions.Add(new int2(x, y));
+            }
+        }
 
-            tileExists[yPos * gameControllerComponent.numTilesX + xPos] = true;
+        // Fisher-Yates shuffle
+        for (var i = openPositions.Length - 1; i > 0; i--)
+        {
+            var j = rng.NextInt(0, i + 1);
+            (openPositions[i], openPositions[j]) = (openPositions[j], openPositions[i]);
+        }
+
+        var spawnIndex = 0;
+        var availablePositions = openPositions.Length;
+        var actualHumans = math.min(gameControllerComponent.numHumans, availablePositions);
+        var actualZombies = math.min(gameControllerComponent.numZombies, math.max(0, availablePositions - actualHumans));
+
+        // Human Units
+        for (var i = 0; i < actualHumans; i++)
+        {
+            var pos = openPositions[spawnIndex++];
+            tileExists[pos.y * gameControllerComponent.numTilesX + pos.x] = true;
             tileUnitKinds.Add(TileUnitKinds.HumanUnit);
-            tileUnitPositions.Add(new int3(xPos, 1, yPos));
+            tileUnitPositions.Add(new int3(pos.x, 1, pos.y));
             tileUnitHealth.Add(gameControllerComponent.humanStartingHealth);
             tileUnitDamage.Add(gameControllerComponent.humanDamage);
             tileUnitRoadHierarchy.Add(0); // Not a road
@@ -324,25 +340,20 @@ public partial struct TileUnitSpawnerSystem : ISystem
         }
 
         // Zombie Units
-        for (var i = 0; i < gameControllerComponent.numZombies; i++)
+        for (var i = 0; i < actualZombies; i++)
         {
-            int xPos, yPos;
-
-            do
-            {
-                xPos = rng.NextInt(1, gameControllerComponent.numTilesX - 1);
-                yPos = rng.NextInt(1, gameControllerComponent.numTilesY - 1);
-            } while (tileExists[yPos * gameControllerComponent.numTilesX + xPos]);
-
-            tileExists[yPos * gameControllerComponent.numTilesX + xPos] = true;
+            var pos = openPositions[spawnIndex++];
+            tileExists[pos.y * gameControllerComponent.numTilesX + pos.x] = true;
             tileUnitKinds.Add(TileUnitKinds.ZombieUnit);
-            tileUnitPositions.Add(new int3(xPos, 1, yPos));
+            tileUnitPositions.Add(new int3(pos.x, 1, pos.y));
             tileUnitHealth.Add(gameControllerComponent.zombieStartingHealth);
             tileUnitDamage.Add(gameControllerComponent.zombieDamage);
             tileUnitRoadHierarchy.Add(0); // Not a road
             tileUnitHeights.Add(0);
             tileUnitBuildingIds.Add(0);
         }
+
+        openPositions.Dispose();
 
         // Collect building mesh data for procedural generation (before disposing native arrays)
         var buildingMeshDataList = new System.Collections.Generic.List<BuildingMeshData>();
