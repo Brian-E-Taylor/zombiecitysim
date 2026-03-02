@@ -52,7 +52,7 @@ public static class LSystemArterialGenerator
         var lSystemString = ExpandGrammar(iterations, Allocator.Temp);
 
         // Scale branch segment length with map size
-        var branchSegmentLength = segmentLength * math.clamp((float)math.min(numTilesX, numTilesY) / 200f, 0.8f, 2.5f);
+        var branchSegmentLength = segmentLength * math.clamp(math.min(numTilesX, numTilesY) / 200f, 0.8f, 2.5f);
 
         // Edge seeds (pointing inward)
         var edgeSeeds = numSeeds;

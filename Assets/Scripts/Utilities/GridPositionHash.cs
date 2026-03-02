@@ -35,6 +35,6 @@ public static class GridPositionHash
         // Normalize ordering so (A→B) and (B→A) produce the same key
         var lo = math.min(keyA, keyB);
         var hi = math.max(keyA, keyB);
-        return (ulong)lo | ((ulong)hi << 32);
+        return lo | ((ulong)hi << 32);
     }
 }

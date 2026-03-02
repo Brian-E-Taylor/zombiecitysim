@@ -98,7 +98,7 @@ public static class AlleyGenerator
 
                 // Check if any neighbor is a road (not a building)
                 var bordersRoad = false;
-                var neighbors = new int2[]
+                var neighbors = new[]
                 {
                     new int2(x - 1, y),
                     new int2(x + 1, y),
@@ -172,7 +172,7 @@ public static class AlleyGenerator
             var bestNext = new int2(-1, -1);
             var bestScore = float.MinValue;
 
-            var directions = new int2[]
+            var directions = new[]
             {
                 new int2(1, 0),
                 new int2(-1, 0),
@@ -234,8 +234,7 @@ public static class AlleyGenerator
             current = bestNext;
 
             // Check if we've reached the opposite side (connects to a road)
-            var currentIdx = current.y * numTilesX + current.x;
-            var checkNeighbors = new int2[]
+            var checkNeighbors = new[]
             {
                 new int2(current.x - 1, current.y),
                 new int2(current.x + 1, current.y),
