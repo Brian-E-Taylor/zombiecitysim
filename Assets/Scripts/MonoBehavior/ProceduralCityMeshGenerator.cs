@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Rendering;
 using Unity.Mathematics;
@@ -44,11 +45,11 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
         _generatedObjects.Clear();
     }
 
-    public void GenerateCityMesh(BuildingMeshData[] buildings, int numTilesX, int numTilesY)
+    public void GenerateCityMesh(NativeList<BuildingMeshData> buildings, int numTilesX, int numTilesY)
     {
         ClearCity();
 
-        if (buildings == null || buildings.Length == 0)
+        if (!buildings.IsCreated || buildings.Length == 0)
             return;
 
         // Group buildings by spatial grid cells for efficient frustum culling
@@ -73,9 +74,12 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
                 var cellZ = building.Z / SpatialCellSize;
                 var cellKey = cellZ * cellsX + cellX;
 
-                if (!spatialCells.ContainsKey(cellKey))
-                    spatialCells[cellKey] = new List<BuildingMeshData>();
-                spatialCells[cellKey].Add(building);
+                if (!spatialCells.TryGetValue(cellKey, out var cellList))
+                {
+                    cellList = new List<BuildingMeshData>();
+                    spatialCells[cellKey] = cellList;
+                }
+                cellList.Add(building);
             }
         }
 
@@ -119,6 +123,7 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
         public int StartX;
         public int Z;
         public int Width;
+        public int Depth;
         public float Height;
         public Color32 Color;
     }
@@ -154,7 +159,7 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
             if (merged.Contains(key))
                 continue;
 
-            // Start a new run
+            // Start a new run along X
             var width = 1;
             merged.Add(key);
 
@@ -168,8 +173,51 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
                 var nextB = buildings[nextIdx];
                 if (nextB.Height != b.Height || nextB.BuildingId != b.BuildingId)
                     break;
-                merged.Add(nextKey);
+                if (!merged.Add(nextKey))
+                    break;
                 width++;
+            }
+
+            // 2D greedy meshing: try to extend the run in the +Z direction
+            var depth = 1;
+            while (true)
+            {
+                var nextZ = b.Z + depth;
+                var canExtend = true;
+
+                // Check if an identical run exists at nextZ: same startX, same width,
+                // all cells have same Height and BuildingId, and none already merged
+                for (var dx = 0; dx < width; dx++)
+                {
+                    var checkKey = (long)(b.X + dx) << 32 | (uint)nextZ;
+                    if (!grid.TryGetValue(checkKey, out var checkIdx))
+                    {
+                        canExtend = false;
+                        break;
+                    }
+                    var checkB = buildings[checkIdx];
+                    if (checkB.Height != b.Height || checkB.BuildingId != b.BuildingId)
+                    {
+                        canExtend = false;
+                        break;
+                    }
+                    if (merged.Contains(checkKey))
+                    {
+                        canExtend = false;
+                        break;
+                    }
+                }
+
+                if (!canExtend)
+                    break;
+
+                // Mark all cells in this Z row as merged
+                for (var dx = 0; dx < width; dx++)
+                {
+                    var markKey = (long)(b.X + dx) << 32 | (uint)nextZ;
+                    merged.Add(markKey);
+                }
+                depth++;
             }
 
             var height = baseHeight + b.Height * 1.0f;
@@ -180,6 +228,7 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
                 StartX = b.X,
                 Z = b.Z,
                 Width = width,
+                Depth = depth,
                 Height = height,
                 Color = new Color32(colorValue, colorValue, colorValue, 255)
             });
@@ -207,7 +256,7 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
         {
             AddMergedCube(vertices, normals, colors, triangles,
                 ref vertexIndex, ref triangleIndex,
-                run.StartX, run.Z, run.Width, run.Height, run.Color);
+                run.StartX, run.Z, run.Width, run.Depth, run.Height, run.Color);
         }
 
         var mesh = new Mesh
@@ -225,59 +274,60 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
 
     private void AddMergedCube(Vector3[] vertices, Vector3[] normals, Color32[] colors, int[] triangles,
         ref int vertexIndex, ref int triangleIndex,
-        float x, float z, int width, float height, Color32 color)
+        float x, float z, int width, int depth, float height, Color32 color)
     {
         var y = height / 2f + 0.5f; // Center the cube vertically, offset by 0.5 to sit on ground
         var xMin = x - 0.5f;
         var xMax = x + width - 0.5f;
-        const float halfWidthZ = 0.5f;
+        var halfWidthZ = depth / 2.0f;
+        var zCenter = z + (depth - 1) / 2.0f;
         var halfHeight = height / 2f;
 
         // Front face (Z+)
-        vertices[vertexIndex] = new Vector3(xMin, y - halfHeight, z + halfWidthZ);
-        vertices[vertexIndex + 1] = new Vector3(xMax, y - halfHeight, z + halfWidthZ);
-        vertices[vertexIndex + 2] = new Vector3(xMax, y + halfHeight, z + halfWidthZ);
-        vertices[vertexIndex + 3] = new Vector3(xMin, y + halfHeight, z + halfWidthZ);
+        vertices[vertexIndex] = new Vector3(xMin, y - halfHeight, zCenter + halfWidthZ);
+        vertices[vertexIndex + 1] = new Vector3(xMax, y - halfHeight, zCenter + halfWidthZ);
+        vertices[vertexIndex + 2] = new Vector3(xMax, y + halfHeight, zCenter + halfWidthZ);
+        vertices[vertexIndex + 3] = new Vector3(xMin, y + halfHeight, zCenter + halfWidthZ);
         normals[vertexIndex] = normals[vertexIndex + 1] = normals[vertexIndex + 2] = normals[vertexIndex + 3] = Vector3.forward;
         colors[vertexIndex] = colors[vertexIndex + 1] = colors[vertexIndex + 2] = colors[vertexIndex + 3] = color;
         AddQuadTriangles(triangles, ref triangleIndex, vertexIndex);
         vertexIndex += 4;
 
         // Back face (Z-)
-        vertices[vertexIndex] = new Vector3(xMax, y - halfHeight, z - halfWidthZ);
-        vertices[vertexIndex + 1] = new Vector3(xMin, y - halfHeight, z - halfWidthZ);
-        vertices[vertexIndex + 2] = new Vector3(xMin, y + halfHeight, z - halfWidthZ);
-        vertices[vertexIndex + 3] = new Vector3(xMax, y + halfHeight, z - halfWidthZ);
+        vertices[vertexIndex] = new Vector3(xMax, y - halfHeight, zCenter - halfWidthZ);
+        vertices[vertexIndex + 1] = new Vector3(xMin, y - halfHeight, zCenter - halfWidthZ);
+        vertices[vertexIndex + 2] = new Vector3(xMin, y + halfHeight, zCenter - halfWidthZ);
+        vertices[vertexIndex + 3] = new Vector3(xMax, y + halfHeight, zCenter - halfWidthZ);
         normals[vertexIndex] = normals[vertexIndex + 1] = normals[vertexIndex + 2] = normals[vertexIndex + 3] = Vector3.back;
         colors[vertexIndex] = colors[vertexIndex + 1] = colors[vertexIndex + 2] = colors[vertexIndex + 3] = color;
         AddQuadTriangles(triangles, ref triangleIndex, vertexIndex);
         vertexIndex += 4;
 
         // Right face (X+)
-        vertices[vertexIndex] = new Vector3(xMax, y - halfHeight, z + halfWidthZ);
-        vertices[vertexIndex + 1] = new Vector3(xMax, y - halfHeight, z - halfWidthZ);
-        vertices[vertexIndex + 2] = new Vector3(xMax, y + halfHeight, z - halfWidthZ);
-        vertices[vertexIndex + 3] = new Vector3(xMax, y + halfHeight, z + halfWidthZ);
+        vertices[vertexIndex] = new Vector3(xMax, y - halfHeight, zCenter + halfWidthZ);
+        vertices[vertexIndex + 1] = new Vector3(xMax, y - halfHeight, zCenter - halfWidthZ);
+        vertices[vertexIndex + 2] = new Vector3(xMax, y + halfHeight, zCenter - halfWidthZ);
+        vertices[vertexIndex + 3] = new Vector3(xMax, y + halfHeight, zCenter + halfWidthZ);
         normals[vertexIndex] = normals[vertexIndex + 1] = normals[vertexIndex + 2] = normals[vertexIndex + 3] = Vector3.right;
         colors[vertexIndex] = colors[vertexIndex + 1] = colors[vertexIndex + 2] = colors[vertexIndex + 3] = color;
         AddQuadTriangles(triangles, ref triangleIndex, vertexIndex);
         vertexIndex += 4;
 
         // Left face (X-)
-        vertices[vertexIndex] = new Vector3(xMin, y - halfHeight, z - halfWidthZ);
-        vertices[vertexIndex + 1] = new Vector3(xMin, y - halfHeight, z + halfWidthZ);
-        vertices[vertexIndex + 2] = new Vector3(xMin, y + halfHeight, z + halfWidthZ);
-        vertices[vertexIndex + 3] = new Vector3(xMin, y + halfHeight, z - halfWidthZ);
+        vertices[vertexIndex] = new Vector3(xMin, y - halfHeight, zCenter - halfWidthZ);
+        vertices[vertexIndex + 1] = new Vector3(xMin, y - halfHeight, zCenter + halfWidthZ);
+        vertices[vertexIndex + 2] = new Vector3(xMin, y + halfHeight, zCenter + halfWidthZ);
+        vertices[vertexIndex + 3] = new Vector3(xMin, y + halfHeight, zCenter - halfWidthZ);
         normals[vertexIndex] = normals[vertexIndex + 1] = normals[vertexIndex + 2] = normals[vertexIndex + 3] = Vector3.left;
         colors[vertexIndex] = colors[vertexIndex + 1] = colors[vertexIndex + 2] = colors[vertexIndex + 3] = color;
         AddQuadTriangles(triangles, ref triangleIndex, vertexIndex);
         vertexIndex += 4;
 
         // Top face (Y+)
-        vertices[vertexIndex] = new Vector3(xMin, y + halfHeight, z + halfWidthZ);
-        vertices[vertexIndex + 1] = new Vector3(xMax, y + halfHeight, z + halfWidthZ);
-        vertices[vertexIndex + 2] = new Vector3(xMax, y + halfHeight, z - halfWidthZ);
-        vertices[vertexIndex + 3] = new Vector3(xMin, y + halfHeight, z - halfWidthZ);
+        vertices[vertexIndex] = new Vector3(xMin, y + halfHeight, zCenter + halfWidthZ);
+        vertices[vertexIndex + 1] = new Vector3(xMax, y + halfHeight, zCenter + halfWidthZ);
+        vertices[vertexIndex + 2] = new Vector3(xMax, y + halfHeight, zCenter - halfWidthZ);
+        vertices[vertexIndex + 3] = new Vector3(xMin, y + halfHeight, zCenter - halfWidthZ);
         normals[vertexIndex] = normals[vertexIndex + 1] = normals[vertexIndex + 2] = normals[vertexIndex + 3] = Vector3.up;
         colors[vertexIndex] = colors[vertexIndex + 1] = colors[vertexIndex + 2] = colors[vertexIndex + 3] = color;
         AddQuadTriangles(triangles, ref triangleIndex, vertexIndex);
@@ -305,7 +355,7 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
         meshFilter.mesh = mesh;
 
         var meshRenderer = obj.AddComponent<MeshRenderer>();
-        meshRenderer.material = material;
+        meshRenderer.sharedMaterial = material;
         meshRenderer.shadowCastingMode = ShadowCastingMode.On;
         meshRenderer.receiveShadows = true;
 

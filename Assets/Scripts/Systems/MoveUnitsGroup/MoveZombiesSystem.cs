@@ -6,7 +6,7 @@ using Unity.Jobs;
 using Unity.Mathematics;
 
 [BurstCompile]
-public partial struct MoveTowardsHumansJob : IJobEntity
+public partial struct MoveZombiesJob : IJobEntity
 {
     public EntityCommandBuffer.ParallelWriter Ecb;
 
@@ -28,7 +28,7 @@ public partial struct MoveTowardsHumansJob : IJobEntity
     [NativeDisableContainerSafetyRestriction]
     public NativeParallelHashMap<ulong, byte>.ParallelWriter LOSCacheWriter;
 
-    public void Execute([EntityIndexInQuery] int entityIndexInQuery, ref DesiredNextGridPosition desiredNextGridPosition, ref RandomGenerator random, [ReadOnly] in GridPosition gridPosition)
+    public void Execute([EntityIndexInQuery] int entityIndexInQuery, ref DesiredNextGridPosition desiredNextGridPosition, ref RandomGenerator random, [ReadOnly] in GridPosition gridPosition, [ReadOnly] in TurnActive turnActive, [ReadOnly] in Zombie zombie)
     {
         var zombieHearingHashMapCellSize = HearingDistance * 2 + 1;
         var zombieVisionHashMapCellSize = VisionDistance * 2 + 1;
@@ -175,9 +175,8 @@ public partial struct MoveTowardsHumansJob : IJobEntity
 
 [UpdateInGroup(typeof(MoveUnitsGroup))]
 [RequireMatchingQueriesForUpdate]
-public partial struct MoveTowardsHumansSystem : ISystem
+public partial struct MoveZombiesSystem : ISystem
 {
-    private EntityQuery _moveTowardsHumanQuery;
     private EntityQuery _humanQuery;
     private EntityQuery _audibleQuery;
 
@@ -190,10 +189,6 @@ public partial struct MoveTowardsHumansSystem : ISystem
 
     public void OnCreate(ref SystemState state)
     {
-        _moveTowardsHumanQuery = state.GetEntityQuery(new EntityQueryBuilder(Allocator.Temp)
-            .WithAll<GridPosition, MoveTowardsHuman, TurnActive>()
-            .WithAllRW<DesiredNextGridPosition, RandomGenerator>()
-        );
         _humanQuery = state.GetEntityQuery(new EntityQueryBuilder(Allocator.Temp).WithAll<Human, GridPosition>());
         _audibleQuery = state.GetEntityQuery(new EntityQueryBuilder(Allocator.Temp).WithAll<Audible>());
 
@@ -209,7 +204,6 @@ public partial struct MoveTowardsHumansSystem : ISystem
         state.RequireForUpdate<GameControllerComponent>();
         state.RequireForUpdate<LOSCacheComponent>();
         state.RequireForUpdate<HashHumanPositionsComponent>();
-        state.RequireForUpdate(_moveTowardsHumanQuery);
         state.RequireAnyForUpdate(_humanQuery, _audibleQuery);
     }
 
@@ -281,7 +275,7 @@ public partial struct MoveTowardsHumansSystem : ISystem
         // Get LOS cache for this frame
         var losCacheComponent = SystemAPI.GetSingleton<LOSCacheComponent>();
 
-        state.Dependency = new MoveTowardsHumansJob
+        state.Dependency = new MoveZombiesJob
         {
             Ecb = SystemAPI.GetSingleton<BeginInitializationEntityCommandBufferSystem.Singleton>()
                 .CreateCommandBuffer(state.WorldUnmanaged).AsParallelWriter(),
@@ -299,7 +293,7 @@ public partial struct MoveTowardsHumansSystem : ISystem
             // LOS cache - read from existing cache, write new entries via parallel writer
             LOSCacheRead = losCacheComponent.Cache,
             LOSCacheWriter = losCacheComponent.Cache.AsParallelWriter(),
-        }.ScheduleParallel(_moveTowardsHumanQuery, state.Dependency);
+        }.ScheduleParallel(state.Dependency);
     }
 
     public void OnDestroy(ref SystemState state)

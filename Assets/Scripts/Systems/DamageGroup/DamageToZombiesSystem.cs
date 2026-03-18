@@ -6,6 +6,7 @@ using Unity.Mathematics;
 using Unity.Rendering;
 
 [UpdateInGroup(typeof(DamageGroup))]
+[UpdateAfter(typeof(DamageToHumansSystem))]
 [RequireMatchingQueriesForUpdate]
 public partial struct DamageToZombiesSystem : ISystem
 {

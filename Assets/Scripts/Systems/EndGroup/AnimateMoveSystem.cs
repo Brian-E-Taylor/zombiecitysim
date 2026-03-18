@@ -13,7 +13,8 @@ public partial struct AnimateMoveJob : IJobEntity
     {
         var nextTranslation = math.lerp(new float3(gridPosition.Value), new float3(desiredNextGridPosition.Value), PercentAnimate);
         transform.Position = nextTranslation;
-        gridPosition.Value = math.select(gridPosition.Value, desiredNextGridPosition.Value, math.abs(PercentAnimate - 1.0f) < 0.0001);
+        if (PercentAnimate >= 1.0f)
+            gridPosition.Value = desiredNextGridPosition.Value;
     }
 }
 
@@ -39,7 +40,8 @@ public partial struct AnimateMoveSystem : ISystem
 
         _totalTime += SystemAPI.Time.DeltaTime;
 
-        var percentAnimate = _totalTime / gameControllerComponent.turnDelayTime;
+        var turnDelay = math.max(gameControllerComponent.turnDelayTime, 0.001f);
+        var percentAnimate = _totalTime / turnDelay;
         if (percentAnimate >= 1.0f)
         {
             percentAnimate = 1.0f;

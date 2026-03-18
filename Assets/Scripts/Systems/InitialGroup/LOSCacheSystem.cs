@@ -42,44 +42,49 @@ public partial struct LOSCacheSystem : ISystem
         var losCacheComponent = SystemAPI.GetSingletonRW<LOSCacheComponent>();
         var gameController = SystemAPI.GetSingleton<GameControllerComponent>();
 
-        // Estimate required capacity based on unit counts and vision distances
-        // Each zombie can check up to (2*visionDist+1)^2 positions for humans
-        // Each human can check up to (2*visionDist+1)^2 positions for zombies
-        // But many of these will be duplicates, so we use a fraction
+        // Estimate required capacity for *new* entries this frame
         var zombieCount = _zombieQuery.CalculateEntityCount();
         var humanCount = _humanQuery.CalculateEntityCount();
-
-        // Estimate: each unit might generate ~visionDistance unique LOS checks on average
         var zombieVisionChecks = zombieCount * gameController.zombieVisionDistance * 2;
         var humanVisionChecks = humanCount * gameController.humanVisionDistance * 2;
-        var estimatedCapacity = math.max(MinCacheCapacity, (zombieVisionChecks + humanVisionChecks) * 2);
+        var expectedNewEntries = (zombieVisionChecks + humanVisionChecks) * 2;
 
         // Create cache if it doesn't exist
         if (!losCacheComponent.ValueRO.Cache.IsCreated)
         {
-            losCacheComponent.ValueRW.Cache = new NativeParallelHashMap<ulong, byte>(estimatedCapacity, Allocator.Persistent);
+            var initialCapacity = math.max(MinCacheCapacity, expectedNewEntries);
+            losCacheComponent.ValueRW.Cache = new NativeParallelHashMap<ulong, byte>(initialCapacity, Allocator.Persistent);
             losCacheComponent.ValueRW.IsValid = true;
             return;
         }
 
-        var cache = losCacheComponent.ValueRO.Cache;
-
-        // Clear cache each frame and resize if needed
-        // This prevents unbounded growth and ensures sufficient capacity
-        // The intra-frame caching still provides benefit when multiple units check the same positions
-        if (cache.Capacity < estimatedCapacity)
+        // If static collidables changed, clear the cache
+        if (!losCacheComponent.ValueRO.IsValid)
         {
-            // Need more capacity - dispose and recreate
-            losCacheComponent.ValueRW.Cache.Dispose();
-            losCacheComponent.ValueRW.Cache = new NativeParallelHashMap<ulong, byte>(estimatedCapacity, Allocator.Persistent);
-        }
-        else
-        {
-            // Clear for this frame's fresh LOS checks
             losCacheComponent.ValueRW.Cache.Clear();
+            losCacheComponent.ValueRW.IsValid = true;
         }
 
-        losCacheComponent.ValueRW.IsValid = true;
+        var cache = losCacheComponent.ValueRO.Cache;
+        var currentCount = cache.Count();
+        var requiredCapacity = currentCount + expectedNewEntries;
+
+        // Only resize and copy if we actually need more capacity
+        if (cache.Capacity < requiredCapacity)
+        {
+            // Exponential growth or what's required, whichever is larger
+            var newCapacity = math.max(cache.Capacity * 2, requiredCapacity);
+            var newCache = new NativeParallelHashMap<ulong, byte>(newCapacity, Allocator.Persistent);
+
+            // Copy existing data to the new larger cache
+            foreach (var entry in cache)
+            {
+                newCache.TryAdd(entry.Key, entry.Value);
+            }
+
+            losCacheComponent.ValueRW.Cache.Dispose();
+            losCacheComponent.ValueRW.Cache = newCache;
+        }
     }
 
     public void OnDestroy(ref SystemState state)

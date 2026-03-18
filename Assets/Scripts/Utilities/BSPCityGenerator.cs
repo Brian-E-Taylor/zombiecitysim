@@ -263,45 +263,6 @@ public static class BSPCityGenerator
         nodeStack.Dispose();
     }
 
-    public static void ApplyRoadsToGrid(
-        ref NativeArray<bool> tileExists,
-        int numTilesX,
-        int numTilesY,
-        ref NativeList<RoadSplit> roadSplits)
-    {
-        foreach (var split in roadSplits)
-        {
-            if (split.IsHorizontal)
-            {
-                for (var w = 0; w < split.Width; w++)
-                {
-                    var y = split.Position + w;
-                    if (y < 1 || y >= numTilesY - 1) continue;
-
-                    for (var x = split.Start; x <= split.End; x++)
-                    {
-                        if (x < 1 || x >= numTilesX - 1) continue;
-                        tileExists[y * numTilesX + x] = false;
-                    }
-                }
-            }
-            else
-            {
-                for (var w = 0; w < split.Width; w++)
-                {
-                    var x = split.Position + w;
-                    if (x < 1 || x >= numTilesX - 1) continue;
-
-                    for (var y = split.Start; y <= split.End; y++)
-                    {
-                        if (y < 1 || y >= numTilesY - 1) continue;
-                        tileExists[y * numTilesX + x] = false;
-                    }
-                }
-            }
-        }
-    }
-
     public static void ApplyRoadsToGridWithHierarchy(
         ref NativeArray<bool> tileExists,
         ref NativeArray<byte> roadHierarchy,

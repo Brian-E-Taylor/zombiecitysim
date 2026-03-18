@@ -6,7 +6,7 @@ using Unity.Jobs;
 using Unity.Mathematics;
 
 [BurstCompile]
-public partial struct MoveEscapeFromZombiesJob : IJobEntity
+public partial struct MoveHumansJob : IJobEntity
 {
     public int VisionDistance;
     [ReadOnly] public NativeParallelHashMap<uint, int> HumanVisionHashMap;
@@ -23,7 +23,7 @@ public partial struct MoveEscapeFromZombiesJob : IJobEntity
     [NativeDisableContainerSafetyRestriction]
     public NativeParallelHashMap<ulong, byte>.ParallelWriter LOSCacheWriter;
 
-    public void Execute(ref DesiredNextGridPosition desiredNextGridPosition, [ReadOnly] in GridPosition gridPosition, [ReadOnly] in TurnActive turnActive)
+    public void Execute(ref DesiredNextGridPosition desiredNextGridPosition, [ReadOnly] in GridPosition gridPosition, [ReadOnly] in TurnActive turnActive, [ReadOnly] in Human human)
     {
         var humanVisionHashMapCellSize = VisionDistance * 2 + 1;
 
@@ -85,7 +85,7 @@ public partial struct MoveEscapeFromZombiesJob : IJobEntity
         if (foundTarget)
         {
             averageTarget /= targetCount;
-            var direction = new int3((int)-averageTarget.x, (int)averageTarget.y, (int)-averageTarget.z);
+            var direction = new int3((int)math.sign(-averageTarget.x), 0, (int)math.sign(-averageTarget.z));
 
             MovementResolution.ComputeDirectionKeys(myGridPositionValue, out var moveUpKey, out var moveRightKey, out var moveDownKey, out var moveLeftKey);
 
@@ -118,9 +118,9 @@ public partial struct MoveEscapeFromZombiesJob : IJobEntity
 }
 
 [UpdateInGroup(typeof(MoveUnitsGroup))]
-[UpdateBefore(typeof(MoveTowardsHumansSystem))]
+[UpdateBefore(typeof(MoveZombiesSystem))]
 [RequireMatchingQueriesForUpdate]
-public partial struct MoveEscapeFromZombiesSystem : ISystem
+public partial struct MoveHumansSystem : ISystem
 {
     private EntityQuery _zombieQuery;
 
@@ -174,7 +174,7 @@ public partial struct MoveEscapeFromZombiesSystem : ISystem
         if (_humanVisionHashMap.Capacity < visionMapCapacity)
             _humanVisionHashMap.Capacity = (int)(visionMapCapacity * 1.2f);
 
-        var hashMoveEscapeTargetVisionJobHandle = new HashGridPositionsCellJob
+        var humansVisionHandle = new HashGridPositionsCellJob
         {
             CellSize = cellSize,
             ParallelWriter = _humanVisionHashMap.AsParallelWriter()
@@ -182,13 +182,13 @@ public partial struct MoveEscapeFromZombiesSystem : ISystem
 
         state.Dependency = JobHandle.CombineDependencies(
             state.Dependency,
-            hashMoveEscapeTargetVisionJobHandle
+            humansVisionHandle
         );
 
         // Get LOS cache for this frame
         var losCacheComponent = SystemAPI.GetSingleton<LOSCacheComponent>();
 
-        state.Dependency = new MoveEscapeFromZombiesJob
+        state.Dependency = new MoveHumansJob
         {
             VisionDistance = gameControllerComponent.humanVisionDistance,
             HumanVisionHashMap = _humanVisionHashMap,

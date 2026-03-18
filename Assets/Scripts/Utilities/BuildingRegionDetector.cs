@@ -78,7 +78,7 @@ public static class BuildingRegionDetector
 
                 while (cellQueue.Length > 0)
                 {
-                    var cell = cellQueue[cellQueue.Length - 1];
+                    var cell = cellQueue[^1];
                     cellQueue.RemoveAt(cellQueue.Length - 1);
 
                     var cellIdx = cell.y * numTilesX + cell.x;
@@ -128,7 +128,7 @@ public static class BuildingRegionDetector
                         region.Size = RegionSize.Large;
 
                     // Classify shape
-                    if (region.AspectRatio < 1.5f && region.FillRatio > 0.8f)
+                    if (region is { AspectRatio: < 1.5f, FillRatio: > 0.8f })
                         region.Shape = RegionShape.Square;
                     else if (region.AspectRatio >= 2.5f || region.FillRatio < 0.5f)
                         region.Shape = RegionShape.Irregular;

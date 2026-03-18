@@ -1,8 +1,9 @@
-﻿using Unity.Collections;
+using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Transforms;
 using Unity.Burst;
+using Unity.Jobs;
 using Unity.Rendering;
 using UnityEngine;
 
@@ -15,72 +16,72 @@ public enum TileUnitKinds
 }
 
 [BurstCompile]
-public partial struct SpawnJob : IJobEntity
+public struct SpawnJob : IJobParallelFor
 {
     public int HumanTurnDelay;
     public int ZombieTurnDelay;
+    public Entity RoadTile_Prefab;
+    public Entity HumanUnit_Prefab;
+    public Entity ZombieUnit_Prefab;
 
     public EntityCommandBuffer.ParallelWriter Ecb;
 
-    [ReadOnly] public NativeList<int3> TileUnitPositionsNativeList;
-    [ReadOnly] public NativeList<TileUnitKinds> TileUnitKindsNativeList;
-    [ReadOnly] public NativeList<int> TileUnitHealthNativeList;
-    [ReadOnly] public NativeList<int> TileUnitDamageNativeList;
-    [ReadOnly] public NativeList<byte> TileUnitRoadHierarchyNativeList;
+    [ReadOnly] public NativeArray<int3> TileUnitPositionsArray;
+    [ReadOnly] public NativeArray<TileUnitKinds> TileUnitKindsArray;
+    [ReadOnly] public NativeArray<int> TileUnitHealthArray;
+    [ReadOnly] public NativeArray<int> TileUnitDamageArray;
+    [ReadOnly] public NativeArray<byte> TileUnitRoadHierarchyArray;
 
-    public void Execute([EntityIndexInQuery] int entityIndexInQuery, [ReadOnly] in TileUnitSpawner_Data tileUnitSpawner)
+    public void Execute(int i)
     {
-        for (var i = 0; i < TileUnitPositionsNativeList.Length; i++)
+        Entity instance;
+        switch (TileUnitKindsArray[i])
         {
-            Entity instance;
-            switch (TileUnitKindsNativeList[i])
-            {
-                case TileUnitKinds.BuildingTile:
-                    // Create collision-only entity (no visual components)
-                    // Visual rendering handled by ProceduralCityMeshGenerator
-                    instance = Ecb.CreateEntity(entityIndexInQuery);
-                    Ecb.AddComponent(entityIndexInQuery, instance, new GridPosition { Value = new int3(TileUnitPositionsNativeList[i]) });
-                    Ecb.AddComponent(entityIndexInQuery, instance, new StaticCollidable());
-                    break;
-                case TileUnitKinds.RoadTile:
-                    instance = Ecb.Instantiate(entityIndexInQuery, tileUnitSpawner.RoadTile_Prefab);
-                    Ecb.SetComponent(entityIndexInQuery, instance, LocalTransform.FromPositionRotationScale(
-                        new float3(TileUnitPositionsNativeList[i].x / 2.0f, 0.5f, TileUnitPositionsNativeList[i].z / 2.0f),
-                        Quaternion.identity,
-                        (TileUnitPositionsNativeList[i].x >= TileUnitPositionsNativeList[i].z ? TileUnitPositionsNativeList[i].x : TileUnitPositionsNativeList[i].z) / 10.0f - 0.1f
-                    ));
-                    // Road hierarchy-based color gradient
-                    var brightness = CityGridHelper.GetRoadBrightness(TileUnitRoadHierarchyNativeList[i]);
-                    Ecb.AddComponent(entityIndexInQuery, instance, new URPMaterialPropertyBaseColor { Value = new float4(brightness, brightness, brightness, 1.0f) });
-                    Ecb.AddComponent(entityIndexInQuery, instance, new RoadSurface());
-                    break;
-                case TileUnitKinds.HumanUnit:
-                    var turnsUntilActive = i % HumanTurnDelay + 1;
-                    HumanCreator.CreateHuman(
-                        ref Ecb,
-                        entityIndexInQuery,
-                        tileUnitSpawner.HumanUnit_Prefab,
-                        TileUnitPositionsNativeList[i],
-                        TileUnitHealthNativeList[i],
-                        TileUnitDamageNativeList[i],
-                        turnsUntilActive,
-                        i == 0 ? 1 : (uint)i
-                    );
-                    break;
-                case TileUnitKinds.ZombieUnit:
-                    turnsUntilActive = i % ZombieTurnDelay + 1;
-                    ZombieCreator.CreateZombie(
-                        ref Ecb,
-                        entityIndexInQuery,
-                        tileUnitSpawner.ZombieUnit_Prefab,
-                        TileUnitPositionsNativeList[i],
-                        TileUnitHealthNativeList[i],
-                        TileUnitDamageNativeList[i],
-                        turnsUntilActive,
-                        i == 0 ? 1 : (uint)i
-                    );
-                    break;
-            }
+            case TileUnitKinds.BuildingTile:
+                // Create collision-only entity (no visual components)
+                // Visual rendering handled by ProceduralCityMeshGenerator
+                instance = Ecb.CreateEntity(i);
+                Ecb.AddComponent(i, instance, new GridPosition { Value = new int3(TileUnitPositionsArray[i]) });
+                Ecb.AddComponent(i, instance, new StaticCollidable());
+                break;
+            case TileUnitKinds.RoadTile:
+                instance = Ecb.Instantiate(i, RoadTile_Prefab);
+                Ecb.SetComponent(i, instance, LocalTransform.FromPositionRotationScale(
+                    new float3(TileUnitPositionsArray[i].x / 2.0f, 0.5f, TileUnitPositionsArray[i].z / 2.0f),
+                    Quaternion.identity,
+                    (TileUnitPositionsArray[i].x >= TileUnitPositionsArray[i].z ? TileUnitPositionsArray[i].x : TileUnitPositionsArray[i].z) / 10.0f - 0.1f
+                ));
+                // Road hierarchy-based color gradient
+                var brightness = CityGridHelper.GetRoadBrightness(TileUnitRoadHierarchyArray[i]);
+                Ecb.AddComponent(i, instance, new URPMaterialPropertyBaseColor { Value = new float4(brightness, brightness, brightness, 1.0f) });
+                Ecb.AddComponent(i, instance, new RoadSurface());
+                break;
+            case TileUnitKinds.HumanUnit:
+                var turnsUntilActive = i % HumanTurnDelay + 1;
+                HumanCreator.CreateHuman(
+                    ref Ecb,
+                    i,
+                    HumanUnit_Prefab,
+                    TileUnitPositionsArray[i],
+                    TileUnitHealthArray[i],
+                    TileUnitDamageArray[i],
+                    turnsUntilActive,
+                    i == 0 ? 1 : (uint)i
+                );
+                break;
+            case TileUnitKinds.ZombieUnit:
+                turnsUntilActive = i % ZombieTurnDelay + 1;
+                ZombieCreator.CreateZombie(
+                    ref Ecb,
+                    i,
+                    ZombieUnit_Prefab,
+                    TileUnitPositionsArray[i],
+                    TileUnitHealthArray[i],
+                    TileUnitDamageArray[i],
+                    turnsUntilActive,
+                    i == 0 ? 1 : (uint)i
+                );
+                break;
         }
     }
 }
@@ -131,6 +132,7 @@ public partial struct TileUnitSpawnerSystem : ISystem
         state.EntityManager.AddComponent(zombieHashEntity, ComponentType.ReadWrite<HashZombiePositionsComponent>());
 
         var gameControllerComponent = SystemAPI.GetSingleton<GameControllerComponent>();
+        var tileUnitSpawner = SystemAPI.GetSingleton<TileUnitSpawner_Data>();
 
         // Initialize seeded RNG (seed is guaranteed non-zero from UpdateGameControllerComponentSystem)
         var rng = new Unity.Mathematics.Random(gameControllerComponent.citySeed);
@@ -151,6 +153,86 @@ public partial struct TileUnitSpawnerSystem : ISystem
         var buildingIds = new NativeArray<ushort>(gridSize, Allocator.Temp);
         var buildingHeights = new NativeArray<byte>(gridSize, Allocator.Temp);
 
+        // Phase 1: Generate city layout (L-system arterials + BSP + regions + templates + alleys)
+        GenerateCity(ref gameControllerComponent, ref rng, ref tileExists, ref roadHierarchy, ref regionIds, ref buildingIds, ref buildingHeights);
+
+        // Phase 2: Collect building tiles into spawn lists
+        CollectBuildingTiles(ref gameControllerComponent, ref tileExists, ref buildingHeights, ref buildingIds,
+            ref tileUnitPositions, ref tileUnitKinds, ref tileUnitHealth, ref tileUnitDamage,
+            ref tileUnitRoadHierarchy, ref tileUnitHeights, ref tileUnitBuildingIds);
+
+        // Phase 3: Shuffle open positions and place human/zombie units
+        SpawnUnits(ref gameControllerComponent, ref rng, ref tileExists,
+            ref tileUnitPositions, ref tileUnitKinds, ref tileUnitHealth, ref tileUnitDamage,
+            ref tileUnitRoadHierarchy, ref tileUnitHeights, ref tileUnitBuildingIds);
+
+        // Phase 4: Collect building mesh data for procedural generation
+        var buildingMeshDataNativeList = CollectBuildingMeshData(ref tileUnitPositions, ref tileUnitKinds, ref tileUnitHeights, ref tileUnitBuildingIds);
+
+        tileExists.Dispose();
+        roadHierarchy.Dispose();
+        regionIds.Dispose();
+        buildingIds.Dispose();
+        buildingHeights.Dispose();
+
+        // Dispose mesh-only lists now that we've collected the data
+        tileUnitHeights.Dispose();
+        tileUnitBuildingIds.Dispose();
+
+        var spawnJobHandle = new SpawnJob
+        {
+            HumanTurnDelay = gameControllerComponent.humanTurnDelay,
+            ZombieTurnDelay = gameControllerComponent.zombieTurnDelay,
+            RoadTile_Prefab = tileUnitSpawner.RoadTile_Prefab,
+            HumanUnit_Prefab = tileUnitSpawner.HumanUnit_Prefab,
+            ZombieUnit_Prefab = tileUnitSpawner.ZombieUnit_Prefab,
+
+            Ecb = SystemAPI.GetSingleton<BeginInitializationEntityCommandBufferSystem.Singleton>()
+                .CreateCommandBuffer(state.WorldUnmanaged).AsParallelWriter(),
+
+            TileUnitPositionsArray = tileUnitPositions.AsArray(),
+            TileUnitKindsArray = tileUnitKinds.AsArray(),
+            TileUnitHealthArray = tileUnitHealth.AsArray(),
+            TileUnitDamageArray = tileUnitDamage.AsArray(),
+            TileUnitRoadHierarchyArray = tileUnitRoadHierarchy.AsArray()
+        }.Schedule(tileUnitPositions.Length, 64, state.Dependency);
+
+        tileUnitPositions.Dispose(spawnJobHandle);
+        tileUnitKinds.Dispose(spawnJobHandle);
+        tileUnitHealth.Dispose(spawnJobHandle);
+        tileUnitDamage.Dispose(spawnJobHandle);
+        tileUnitRoadHierarchy.Dispose(spawnJobHandle);
+
+        state.Dependency = spawnJobHandle;
+
+        // Generate procedural city mesh (buildings rendered via MonoBehaviour, not ECS)
+        if (ProceduralCityMeshGenerator.Instance != null)
+        {
+            ProceduralCityMeshGenerator.Instance.GenerateCityMesh(
+                buildingMeshDataNativeList,
+                gameControllerComponent.numTilesX,
+                gameControllerComponent.numTilesY
+            );
+        }
+
+        buildingMeshDataNativeList.Dispose();
+
+        state.EntityManager.CreateSingleton<RunWorld>();
+    }
+
+    /// <summary>
+    /// Runs the procedural city generation pipeline: L-system arterials, BSP block subdivision,
+    /// region detection, building template application, and alley generation.
+    /// </summary>
+    private static void GenerateCity(
+        ref GameControllerComponent gameControllerComponent,
+        ref Unity.Mathematics.Random rng,
+        ref NativeArray<bool> tileExists,
+        ref NativeArray<byte> roadHierarchy,
+        ref NativeArray<ushort> regionIds,
+        ref NativeArray<ushort> buildingIds,
+        ref NativeArray<byte> buildingHeights)
+    {
         for (var y = 0; y < gameControllerComponent.numTilesY; y++)
             for (var x = 0; x < gameControllerComponent.numTilesX; x++)
                 tileExists[y * gameControllerComponent.numTilesX + x] = true;
@@ -273,7 +355,25 @@ public partial struct TileUnitSpawnerSystem : ISystem
             buildingHeights[bottomIdx] = 3;
             buildingHeights[topIdx] = 3;
         }
+    }
 
+    /// <summary>
+    /// Iterates the building grid and populates the tile spawn lists with building tiles
+    /// and the road floor plane.
+    /// </summary>
+    private static void CollectBuildingTiles(
+        ref GameControllerComponent gameControllerComponent,
+        ref NativeArray<bool> tileExists,
+        ref NativeArray<byte> buildingHeights,
+        ref NativeArray<ushort> buildingIds,
+        ref NativeList<int3> tileUnitPositions,
+        ref NativeList<TileUnitKinds> tileUnitKinds,
+        ref NativeList<int> tileUnitHealth,
+        ref NativeList<int> tileUnitDamage,
+        ref NativeList<byte> tileUnitRoadHierarchy,
+        ref NativeList<byte> tileUnitHeights,
+        ref NativeList<ushort> tileUnitBuildingIds)
+    {
         // Fill in buildings with their assigned heights
         for (var y = 0; y < gameControllerComponent.numTilesY; y++)
         {
@@ -301,7 +401,24 @@ public partial struct TileUnitSpawnerSystem : ISystem
         tileUnitRoadHierarchy.Add((byte)RoadHierarchyLevel.Arterial); // Default for floor plane
         tileUnitHeights.Add(0);
         tileUnitBuildingIds.Add(0);
+    }
 
+    /// <summary>
+    /// Collects open interior positions, performs a Fisher-Yates shuffle, then places
+    /// human and zombie units into the spawn lists.
+    /// </summary>
+    private static void SpawnUnits(
+        ref GameControllerComponent gameControllerComponent,
+        ref Unity.Mathematics.Random rng,
+        ref NativeArray<bool> tileExists,
+        ref NativeList<int3> tileUnitPositions,
+        ref NativeList<TileUnitKinds> tileUnitKinds,
+        ref NativeList<int> tileUnitHealth,
+        ref NativeList<int> tileUnitDamage,
+        ref NativeList<byte> tileUnitRoadHierarchy,
+        ref NativeList<byte> tileUnitHeights,
+        ref NativeList<ushort> tileUnitBuildingIds)
+    {
         // Collect open interior positions for unit spawning
         var openPositions = new NativeList<int2>(Allocator.Temp);
         for (var y = 1; y < gameControllerComponent.numTilesY - 1; y++)
@@ -354,9 +471,19 @@ public partial struct TileUnitSpawnerSystem : ISystem
         }
 
         openPositions.Dispose();
+    }
 
-        // Collect building mesh data for procedural generation (before disposing native arrays)
-        var buildingMeshDataList = new System.Collections.Generic.List<BuildingMeshData>();
+    /// <summary>
+    /// Builds the list of BuildingMeshData from the tile spawn lists for procedural mesh generation.
+    /// </summary>
+    private static NativeList<BuildingMeshData> CollectBuildingMeshData(
+        ref NativeList<int3> tileUnitPositions,
+        ref NativeList<TileUnitKinds> tileUnitKinds,
+        ref NativeList<byte> tileUnitHeights,
+        ref NativeList<ushort> tileUnitBuildingIds)
+    {
+        // Collect building mesh data for procedural generation using NativeList to avoid GC
+        var buildingMeshDataList = new NativeList<BuildingMeshData>(Allocator.Temp);
         for (var i = 0; i < tileUnitKinds.Length; i++)
         {
             if (tileUnitKinds[i] == TileUnitKinds.BuildingTile)
@@ -371,47 +498,6 @@ public partial struct TileUnitSpawnerSystem : ISystem
             }
         }
 
-        tileExists.Dispose();
-        roadHierarchy.Dispose();
-        regionIds.Dispose();
-        buildingIds.Dispose();
-        buildingHeights.Dispose();
-
-        // Dispose mesh-only lists now that we've collected the data
-        tileUnitHeights.Dispose();
-        tileUnitBuildingIds.Dispose();
-
-        new SpawnJob
-        {
-            HumanTurnDelay = gameControllerComponent.humanTurnDelay,
-            ZombieTurnDelay = gameControllerComponent.zombieTurnDelay,
-
-            Ecb = SystemAPI.GetSingleton<BeginInitializationEntityCommandBufferSystem.Singleton>()
-                .CreateCommandBuffer(state.WorldUnmanaged).AsParallelWriter(),
-
-            TileUnitPositionsNativeList = tileUnitPositions,
-            TileUnitKindsNativeList = tileUnitKinds,
-            TileUnitHealthNativeList = tileUnitHealth,
-            TileUnitDamageNativeList = tileUnitDamage,
-            TileUnitRoadHierarchyNativeList = tileUnitRoadHierarchy
-        }.Run();
-
-        tileUnitPositions.Dispose(state.Dependency);
-        tileUnitKinds.Dispose(state.Dependency);
-        tileUnitHealth.Dispose(state.Dependency);
-        tileUnitDamage.Dispose(state.Dependency);
-        tileUnitRoadHierarchy.Dispose(state.Dependency);
-
-        // Generate procedural city mesh (buildings rendered via MonoBehaviour, not ECS)
-        if (ProceduralCityMeshGenerator.Instance != null)
-        {
-            ProceduralCityMeshGenerator.Instance.GenerateCityMesh(
-                buildingMeshDataList.ToArray(),
-                gameControllerComponent.numTilesX,
-                gameControllerComponent.numTilesY
-            );
-        }
-
-        state.EntityManager.CreateSingleton<RunWorld>();
+        return buildingMeshDataList;
     }
 }
