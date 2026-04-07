@@ -6,30 +6,6 @@ using Unity.Mathematics;
 public static class LineOfSightUtilities
 {
     [BurstCompile]
-    public static bool InLineOfSight([ReadOnly] in int3 initialGridPosition, [ReadOnly] in int3 targetGridPosition, [ReadOnly] in NativeParallelHashMap<uint, int> staticCollidableHashMap)
-    {
-        float vx = targetGridPosition.x - initialGridPosition.x;
-        float vz = targetGridPosition.z - initialGridPosition.z;
-        var ox = targetGridPosition.x + 0.5f;
-        var oz = targetGridPosition.z + 0.5f;
-        var l = math.sqrt((vx * vx) + (vz * vz));
-        vx /= l;
-        vz /= l;
-        for (var i = 0; i < (int)l; i++)
-        {
-            var gridPosition = new int3((int)math.floor(ox), initialGridPosition.y, (int)math.floor(oz));
-            var key = GridPositionHash.GetKey(gridPosition.x, gridPosition.z);
-            if (staticCollidableHashMap.TryGetValue(key, out _))
-                return false;
-
-            ox += vx;
-            oz += vz;
-        }
-
-        return true;
-    }
-
-    [BurstCompile]
     public static bool InLineOfSightUpdated([ReadOnly] in int3 initialGridPosition, [ReadOnly] in int3 targetGridPosition, [ReadOnly] in NativeParallelHashMap<uint, int> staticCollidableHashMap)
     {
         var dx = math.abs(targetGridPosition.x - initialGridPosition.x);

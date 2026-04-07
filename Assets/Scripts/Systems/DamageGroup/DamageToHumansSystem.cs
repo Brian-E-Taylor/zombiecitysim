@@ -1,6 +1,7 @@
 ﻿using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Jobs;
 using Unity.Mathematics;
 using Unity.Rendering;
 
@@ -12,10 +13,16 @@ public partial struct DamageToHumansSystem : ISystem
     private EntityQuery _zombiesQuery;
     private float4 _humanFullHealthColor;
 
+    // Pooled hash map for damage accumulation (human positions come from shared HashHumanPositionsComponent)
+    private NativeParallelMultiHashMap<uint, int> _damageHashMap;
+
+    private const int InitialPoolCapacity = 256;
+
     [BurstCompile]
     public void OnCreate(ref SystemState state)
     {
         state.RequireForUpdate<RunWorld>();
+        state.RequireForUpdate<HashHumanPositionsComponent>();
 
         _humansQuery = state.GetEntityQuery(new EntityQueryBuilder(Allocator.Temp)
             .WithAll<Human, MaxHealth, GridPosition>()
@@ -26,6 +33,8 @@ public partial struct DamageToHumansSystem : ISystem
         );
         _humanFullHealthColor = new float4();
         HumanCreator.FillFullHealthColor(ref _humanFullHealthColor);
+
+        _damageHashMap = new NativeParallelMultiHashMap<uint, int>(InitialPoolCapacity, Allocator.Persistent);
     }
 
     [BurstCompile]
@@ -37,20 +46,25 @@ public partial struct DamageToHumansSystem : ISystem
         if (humanCount == 0 || zombieCount == 0)
             return;
 
-        var humanHashMap = new NativeParallelHashMap<uint, int>(humanCount, Allocator.TempJob);
-        var damageToHumansHashMap = zombieCount < humanCount ?
-            new NativeParallelMultiHashMap<uint, int>(zombieCount * 8, Allocator.TempJob) :
-            new NativeParallelMultiHashMap<uint, int>(humanCount * 8, Allocator.TempJob);
+        var humanPositionsComponent = SystemAPI.GetSingleton<HashHumanPositionsComponent>();
+        state.Dependency = JobHandle.CombineDependencies(state.Dependency, humanPositionsComponent.Handle);
 
-        state.Dependency = new HashGridPositionsJob { ParallelWriter = humanHashMap.AsParallelWriter() }.ScheduleParallel(_humansQuery, state.Dependency);
+        var damageCapacity = (zombieCount < humanCount ? zombieCount : humanCount) * 8;
+        _damageHashMap.Clear();
+        if (_damageHashMap.Capacity < damageCapacity)
+            _damageHashMap.Capacity = (int)(damageCapacity * 1.2f);
+
         state.Dependency = new CalculateDamageJob
         {
-            DamageTakingHashMap = humanHashMap,
-            DamageAmountHashMapParallelWriter = damageToHumansHashMap.AsParallelWriter()
+            DamageTakingHashMap = humanPositionsComponent.HashMap,
+            DamageAmountHashMapParallelWriter = _damageHashMap.AsParallelWriter()
         }.ScheduleParallel(_zombiesQuery, state.Dependency);
-        humanHashMap.Dispose(state.Dependency);
 
-        state.Dependency = new DealDamageJob { FullHealthColor = _humanFullHealthColor, DamageAmountHashMap = damageToHumansHashMap }.ScheduleParallel(_humansQuery, state.Dependency);
-        damageToHumansHashMap.Dispose(state.Dependency);
+        state.Dependency = new DealDamageJob { FullHealthColor = _humanFullHealthColor, DamageAmountHashMap = _damageHashMap }.ScheduleParallel(_humansQuery, state.Dependency);
+    }
+
+    public void OnDestroy(ref SystemState state)
+    {
+        if (_damageHashMap.IsCreated) _damageHashMap.Dispose();
     }
 }

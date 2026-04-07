@@ -10,7 +10,27 @@ public struct GameControllerComponent : IComponentData
 {
     public int numTilesX;
     public int numTilesY;
-    public int numStreets;
+
+    public uint citySeed;  // 0 = random seed from time
+
+    // BSP config
+    public int minBlockSize;
+    public int maxBlockSize;
+    public float splitVariance;
+
+    // L-System config
+    public bool enableLSystemArterials;
+    public int lSystemIterations;
+    public float lSystemBranchAngle;
+    public float lSystemSegmentLength;
+    public int lSystemRoadWidth;
+    public int lSystemNumSeeds;
+
+    // Alley config
+    public bool enableAlleys;
+    public int alleyMinRegionSize;
+    public float alleyDeadEndProbability;
+    public int alleyMaxLength;
 
     public int numHumans;
     public int humanStartingHealth;
@@ -31,7 +51,7 @@ public struct GameControllerComponent : IComponentData
 
 [BurstCompile]
 [UpdateInGroup(typeof(InitializationSystemGroup))]
-[UpdateBefore(typeof(TileUnitSpawner_System))]
+[UpdateBefore(typeof(TileUnitSpawnerSystem))]
 [RequireMatchingQueriesForUpdate]
 public partial class UpdateGameControllerComponentSystem : SystemBase
 {
@@ -51,7 +71,28 @@ public partial class UpdateGameControllerComponentSystem : SystemBase
 
         gameControllerComponent.ValueRW.numTilesX = GameController.Instance.numTilesX;
         gameControllerComponent.ValueRW.numTilesY = GameController.Instance.numTilesY;
-        gameControllerComponent.ValueRW.numStreets = GameController.Instance.numStreets;
+
+        // Generate random seed if citySeed is 0 (done here since SystemBase is not Burst-compiled)
+        var seed = GameController.Instance.citySeed;
+        if (seed == 0)
+            seed = (uint)DateTime.Now.Ticks;
+        gameControllerComponent.ValueRW.citySeed = seed;
+
+        gameControllerComponent.ValueRW.minBlockSize = GameController.Instance.minBlockSize;
+        gameControllerComponent.ValueRW.maxBlockSize = GameController.Instance.maxBlockSize;
+        gameControllerComponent.ValueRW.splitVariance = GameController.Instance.splitVariance;
+
+        gameControllerComponent.ValueRW.enableLSystemArterials = GameController.Instance.enableLSystemArterials;
+        gameControllerComponent.ValueRW.lSystemIterations = GameController.Instance.lSystemIterations;
+        gameControllerComponent.ValueRW.lSystemBranchAngle = GameController.Instance.lSystemBranchAngle;
+        gameControllerComponent.ValueRW.lSystemSegmentLength = GameController.Instance.lSystemSegmentLength;
+        gameControllerComponent.ValueRW.lSystemRoadWidth = GameController.Instance.lSystemRoadWidth;
+        gameControllerComponent.ValueRW.lSystemNumSeeds = GameController.Instance.lSystemNumSeeds;
+
+        gameControllerComponent.ValueRW.enableAlleys = GameController.Instance.enableAlleys;
+        gameControllerComponent.ValueRW.alleyMinRegionSize = GameController.Instance.alleyMinRegionSize;
+        gameControllerComponent.ValueRW.alleyDeadEndProbability = GameController.Instance.alleyDeadEndProbability;
+        gameControllerComponent.ValueRW.alleyMaxLength = GameController.Instance.alleyMaxLength;
 
         gameControllerComponent.ValueRW.numHumans = GameController.Instance.numHumans;
         gameControllerComponent.ValueRW.humanStartingHealth = GameController.Instance.humanStartingHealth;

@@ -1,7 +1,6 @@
-﻿using Unity.Burst;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
-using Unity.Mathematics;
 
 [BurstCompile]
 public partial struct HashNextGridPositionsJob : IJobEntity
@@ -35,11 +34,14 @@ public partial struct FinalizeMovementJob : IJobEntity
 }
 
 [UpdateInGroup(typeof(MoveUnitsGroup))]
-[UpdateAfter(typeof(MoveTowardsHumansSystem))]
+[UpdateAfter(typeof(MoveZombiesSystem))]
 [RequireMatchingQueriesForUpdate]
 public partial struct ResolveGridMovementSystem : ISystem
 {
     private EntityQuery _query;
+    private NativeParallelMultiHashMap<uint, int> _nextGridPositionHashMap;
+
+    private const int InitialPoolCapacity = 256;
 
     [BurstCompile]
     public void OnCreate(ref SystemState state)
@@ -49,16 +51,26 @@ public partial struct ResolveGridMovementSystem : ISystem
         _query = state.GetEntityQuery(new EntityQueryBuilder(Allocator.Temp)
             .WithAllRW<DesiredNextGridPosition>()
             .WithAll<GridPosition, TurnActive>());
+
+        _nextGridPositionHashMap = new NativeParallelMultiHashMap<uint, int>(InitialPoolCapacity, Allocator.Persistent);
     }
 
     [BurstCompile]
     public void OnUpdate(ref SystemState state)
     {
         var unitCount = _query.CalculateEntityCount();
-        var nextGridPositionHashMap = new NativeParallelMultiHashMap<uint, int>(unitCount * 2, Allocator.TempJob);
+        var requiredCapacity = unitCount * 2;
 
-        state.Dependency = new HashNextGridPositionsJob { ParallelWriter = nextGridPositionHashMap.AsParallelWriter() }.ScheduleParallel(_query, state.Dependency);
-        state.Dependency = new FinalizeMovementJob { NextGridPositionHashMap = nextGridPositionHashMap }.ScheduleParallel(_query, state.Dependency);
-        nextGridPositionHashMap.Dispose(state.Dependency);
+        _nextGridPositionHashMap.Clear();
+        if (_nextGridPositionHashMap.Capacity < requiredCapacity)
+            _nextGridPositionHashMap.Capacity = requiredCapacity;
+
+        state.Dependency = new HashNextGridPositionsJob { ParallelWriter = _nextGridPositionHashMap.AsParallelWriter() }.ScheduleParallel(_query, state.Dependency);
+        state.Dependency = new FinalizeMovementJob { NextGridPositionHashMap = _nextGridPositionHashMap }.ScheduleParallel(_query, state.Dependency);
+    }
+
+    public void OnDestroy(ref SystemState state)
+    {
+        if (_nextGridPositionHashMap.IsCreated) _nextGridPositionHashMap.Dispose();
     }
 }

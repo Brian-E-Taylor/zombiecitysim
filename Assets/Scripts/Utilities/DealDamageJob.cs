@@ -1,4 +1,3 @@
-using System;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
@@ -24,7 +23,7 @@ public partial struct DealDamageJob : IJobEntity
         health.Value = myHealth;
 
         // Update health color
-        var lerp = math.lerp(0.0f, 1.0f, (float)myHealth / maxHealth.Value);
+        var lerp = math.saturate((float)myHealth / maxHealth.Value);
         materialColor.Value = new float4(
             math.abs(FullHealthColor.x - 1.0f) < 0.001f ? lerp : 1.0f - lerp,
             math.abs(FullHealthColor.y - 1.0f) < 0.001f ? lerp : 1.0f - lerp,

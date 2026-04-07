@@ -10,7 +10,27 @@ public class GameController : MonoBehaviour
 
     public int numTilesX = 130;
     public int numTilesY = 130;
-    public int numStreets = 30;
+
+    public uint citySeed = 0;  // 0 = random seed from time
+
+    // BSP config (fills gaps between L-System arterials)
+    public int minBlockSize = 12;
+    public int maxBlockSize = 35;
+    public float splitVariance = 0.2f;
+
+    [Header("L-System Arterial Roads")]
+    public bool enableLSystemArterials = true;
+    public int lSystemIterations = 2;
+    public float lSystemBranchAngle = 45f;
+    public float lSystemSegmentLength = 20f;
+    public int lSystemRoadWidth = 5;
+    public int lSystemNumSeeds = 4;
+
+    [Header("Alley Generation")]
+    public bool enableAlleys = true;
+    public int alleyMinRegionSize = 25;
+    public float alleyDeadEndProbability = 0.3f;
+    public int alleyMaxLength = 12;
 
     public int numHumans = 1000;
     public int humanStartingHealth = 100;
@@ -36,7 +56,7 @@ public class GameController : MonoBehaviour
 
     public InputField numTilesXInputField;
     public InputField numTilesYInputField;
-    public InputField streetsInputField;
+    public InputField citySeedInputField;
 
     public InputField humanTurnDelayInputField;
     public InputField zombieTurnDelayInputField;
@@ -75,7 +95,8 @@ public class GameController : MonoBehaviour
 
         numTilesXInputField.text = numTilesX.ToString();
         numTilesYInputField.text = numTilesY.ToString();
-        streetsInputField.text = numStreets.ToString();
+        if (citySeedInputField != null)
+            citySeedInputField.text = citySeed.ToString();
 
         humanTurnDelayInputField.text = humanTurnDelay.ToString();
         zombieTurnDelayInputField.text = zombieTurnDelay.ToString();
@@ -97,7 +118,8 @@ public class GameController : MonoBehaviour
 
     public void SetNumHumansInputField(string num)
     {
-        numHumans = int.Parse(num);
+        if (!int.TryParse(num, out var parsed)) return;
+        numHumans = parsed;
         numHumansSlider.value = numHumans;
     }
 
@@ -109,7 +131,8 @@ public class GameController : MonoBehaviour
 
     public void SetNumZombiesInputField(string num)
     {
-        numZombies = int.Parse(num);
+        if (!int.TryParse(num, out var parsed)) return;
+        numZombies = parsed;
         numZombiesSlider.value = numZombies;
     }
 
@@ -121,17 +144,20 @@ public class GameController : MonoBehaviour
 
     public void SetNumTilesXInputField(string num)
     {
-        numTilesX = int.Parse(num);
+        if (int.TryParse(num, out var parsed))
+            numTilesX = parsed;
     }
 
     public void SetNumTilesYInputField(string num)
     {
-        numTilesY = int.Parse(num);
+        if (int.TryParse(num, out var parsed))
+            numTilesY = parsed;
     }
 
-    public void SetNumStreetsInputField(string num)
+    public void SetCitySeedInputField(string num)
     {
-        numStreets = int.Parse(num);
+        if (uint.TryParse(num, out var parsed))
+            citySeed = parsed;
     }
 
     public void OnRegeneratePressed()
@@ -142,22 +168,25 @@ public class GameController : MonoBehaviour
 
     public void SetHumanTurnDelay(string num)
     {
-        humanTurnDelay = int.Parse(num);
+        if (!int.TryParse(num, out var parsed)) return;
+        humanTurnDelay = parsed;
 
         CreateUpdateGameControllerComponentEntity();
     }
 
     public void SetZombieTurnDelay(string num)
     {
-        zombieTurnDelay = int.Parse(num);
+        if (!int.TryParse(num, out var parsed)) return;
+        zombieTurnDelay = parsed;
 
         CreateUpdateGameControllerComponentEntity();
     }
 
     public void SetTurnDelayTimeInputField(string num)
     {
-        turnDelayTime = float.Parse(num) / 1000;
-        turnDelayTimeSlider.value = float.Parse(num);
+        if (!float.TryParse(num, out var parsed)) return;
+        turnDelayTime = parsed / 1000;
+        turnDelayTimeSlider.value = parsed;
 
         CreateUpdateGameControllerComponentEntity();
     }

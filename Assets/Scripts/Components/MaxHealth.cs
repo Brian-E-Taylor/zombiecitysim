@@ -1,6 +1,6 @@
 using Unity.Entities;
 
-public partial struct MaxHealth : IComponentData
+public struct MaxHealth : IComponentData
 {
     public int Value;
 }
