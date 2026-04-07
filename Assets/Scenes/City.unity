@@ -93,10 +93,8 @@ LightmapSettings:
     m_ExportTrainingData: 0
     m_TrainingDataDestination: TrainingData
     m_LightProbeSampleCountMultiplier: 4
-  m_LightingDataAsset: {fileID: 112000004, guid: bb2823dadc281904f8c4d84ad392fdc1,
-    type: 2}
-  m_LightingSettings: {fileID: 4890085278179872738, guid: 42e2f20276eea1441a1fe900e434d13f,
-    type: 2}
+  m_LightingDataAsset: {fileID: 112000004, guid: bb2823dadc281904f8c4d84ad392fdc1, type: 2}
+  m_LightingSettings: {fileID: 4890085278179872738, guid: 42e2f20276eea1441a1fe900e434d13f, type: 2}
 --- !u!196 &5
 NavMeshSettings:
   serializedVersion: 2
@@ -888,22 +886,32 @@ MonoBehaviour:
   numTilesX: 900
   numTilesY: 900
   citySeed: 0
+  turnDelayTime: 0.075
   minBlockSize: 15
   maxBlockSize: 40
   splitVariance: 0.2
+  enableLSystemArterials: 1
+  lSystemIterations: 2
+  lSystemBranchAngle: 45
+  lSystemSegmentLength: 20
+  lSystemRoadWidth: 5
+  lSystemNumSeeds: 4
+  enableAlleys: 1
+  alleyMinRegionSize: 25
+  alleyDeadEndProbability: 0.3
+  alleyMaxLength: 12
   numHumans: 20000
   humanStartingHealth: 100
   humanDamage: 0
   humanVisionDistance: 10
-  humanTurnDelay: 3
+  humanTurnDelay: 2
   numZombies: 10
   zombieStartingHealth: 70
   zombieDamage: 20
   zombieVisionDistance: 8
-  zombieHearingDistance: 20
-  zombieTurnDelay: 5
+  zombieHearingDistance: 16
+  zombieTurnDelay: 3
   audibleDecayTime: 20
-  turnDelayTime: 0
   numHumansInputField: {fileID: 2136234495}
   numHumansSlider: {fileID: 513672571}
   numZombiesInputField: {fileID: 46154448}
@@ -5309,28 +5317,17 @@ MonoBehaviour:
   m_MoveRepeatDelay: 0.5
   m_MoveRepeatRate: 0.1
   m_XRTrackingOrigin: {fileID: 0}
-  m_ActionsAsset: {fileID: -944628639613478452, guid: ca9f5fa95ffab41fb9a615ab714db018,
-    type: 3}
-  m_PointAction: {fileID: -1654692200621890270, guid: ca9f5fa95ffab41fb9a615ab714db018,
-    type: 3}
-  m_MoveAction: {fileID: -8784545083839296357, guid: ca9f5fa95ffab41fb9a615ab714db018,
-    type: 3}
-  m_SubmitAction: {fileID: 392368643174621059, guid: ca9f5fa95ffab41fb9a615ab714db018,
-    type: 3}
-  m_CancelAction: {fileID: 7727032971491509709, guid: ca9f5fa95ffab41fb9a615ab714db018,
-    type: 3}
-  m_LeftClickAction: {fileID: 3001919216989983466, guid: ca9f5fa95ffab41fb9a615ab714db018,
-    type: 3}
-  m_MiddleClickAction: {fileID: -2185481485913320682, guid: ca9f5fa95ffab41fb9a615ab714db018,
-    type: 3}
-  m_RightClickAction: {fileID: -4090225696740746782, guid: ca9f5fa95ffab41fb9a615ab714db018,
-    type: 3}
-  m_ScrollWheelAction: {fileID: 6240969308177333660, guid: ca9f5fa95ffab41fb9a615ab714db018,
-    type: 3}
-  m_TrackedDevicePositionAction: {fileID: 6564999863303420839, guid: ca9f5fa95ffab41fb9a615ab714db018,
-    type: 3}
-  m_TrackedDeviceOrientationAction: {fileID: 7970375526676320489, guid: ca9f5fa95ffab41fb9a615ab714db018,
-    type: 3}
+  m_ActionsAsset: {fileID: -944628639613478452, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_PointAction: {fileID: -1654692200621890270, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_MoveAction: {fileID: -8784545083839296357, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_SubmitAction: {fileID: 392368643174621059, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_CancelAction: {fileID: 7727032971491509709, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_LeftClickAction: {fileID: 3001919216989983466, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_MiddleClickAction: {fileID: -2185481485913320682, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_RightClickAction: {fileID: -4090225696740746782, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_ScrollWheelAction: {fileID: 6240969308177333660, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_TrackedDevicePositionAction: {fileID: 6564999863303420839, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_TrackedDeviceOrientationAction: {fileID: 7970375526676320489, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
   m_DeselectOnBackgroundClick: 1
   m_PointerBehavior: 0
   m_CursorLockBehavior: 0

@@ -32,6 +32,8 @@ public partial struct MoveHumansJob : IJobEntity
         var targetCount = 0;
         var moved = false;
 
+        // Broadphase early-rejection: check the four corner cells of the vision bounding box.
+        // If no zombie occupies any of those coarse cells, skip the expensive per-tile ring scan.
         var foundTarget = HumanVisionHashMap.TryGetValue(math.hash(new int3(myGridPositionValue.x - VisionDistance, myGridPositionValue.y, myGridPositionValue.z - VisionDistance) / humanVisionHashMapCellSize), out _) ||
                           HumanVisionHashMap.TryGetValue(math.hash(new int3(myGridPositionValue.x + VisionDistance, myGridPositionValue.y, myGridPositionValue.z - VisionDistance) / humanVisionHashMapCellSize), out _) ||
                           HumanVisionHashMap.TryGetValue(math.hash(new int3(myGridPositionValue.x - VisionDistance, myGridPositionValue.y, myGridPositionValue.z + VisionDistance) / humanVisionHashMapCellSize), out _) ||
@@ -124,7 +126,8 @@ public partial struct MoveHumansSystem : ISystem
 {
     private EntityQuery _zombieQuery;
 
-    // Pooled hash map for vision cell lookups (zombie positions come from shared HashZombiePositionsComponent)
+    // Pooled hash map for zombie coarse-cell vision lookups, built each frame from _zombieQuery.
+    // Exact zombie positions for per-tile checks come from HashZombiePositionsComponent (ZombieHashMap).
     private NativeParallelHashMap<uint, int> _humanVisionHashMap;
 
     private const int InitialPoolCapacity = 256;

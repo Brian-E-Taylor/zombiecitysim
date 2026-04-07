@@ -37,6 +37,8 @@ public partial struct MoveZombiesJob : IJobEntity
         var nearestTarget = myGridPositionValue;
         var moved = false;
         var foundTarget = false;
+        // Broadphase early-rejection: check the four corner cells of the vision bounding box.
+        // If no human occupies any of those coarse cells, skip the expensive per-tile ring scan.
         var foundBySight = ZombieVisionHashMap.TryGetValue(math.hash(new int3(myGridPositionValue.x - VisionDistance, myGridPositionValue.y, myGridPositionValue.z - VisionDistance) / zombieVisionHashMapCellSize), out _) ||
                            ZombieVisionHashMap.TryGetValue(math.hash(new int3(myGridPositionValue.x + VisionDistance, myGridPositionValue.y, myGridPositionValue.z - VisionDistance) / zombieVisionHashMapCellSize), out _) ||
                            ZombieVisionHashMap.TryGetValue(math.hash(new int3(myGridPositionValue.x - VisionDistance, myGridPositionValue.y, myGridPositionValue.z + VisionDistance) / zombieVisionHashMapCellSize), out _) ||
@@ -47,7 +49,7 @@ public partial struct MoveZombiesJob : IJobEntity
             foundBySight = false;
 
             // Get nearest target
-            // Check all grid positions that are checkDist away in the x or y direction
+            // Check all grid positions that are checkDist away in the x or z direction
             for (var checkDist = 1; checkDist <= VisionDistance && !foundTarget; checkDist++)
             {
                 float nearestDistance = (checkDist + 2) * (checkDist + 2);
@@ -104,7 +106,7 @@ public partial struct MoveZombiesJob : IJobEntity
             if (foundByHearing)
             {
                 // Get nearest target
-                // Check all grid positions that are checkDist away in the x or y direction
+                // Check all grid positions that are checkDist away in the x or z direction
                 for (var checkDist = 1; checkDist <= HearingDistance && !foundTarget; checkDist++)
                 {
                     float nearestDistance = (checkDist + 2) * (checkDist + 2);
@@ -165,6 +167,8 @@ public partial struct MoveZombiesJob : IJobEntity
 
         if (foundBySight)
         {
+            // Only sight-confirmed targets propagate sound events. Hearing-triggered movement
+            // does not create Audible entities, preventing cascading second-order sound chains.
             var audibleEntity = Ecb.CreateEntity(entityIndexInQuery);
             Ecb.AddComponent(entityIndexInQuery, audibleEntity, new Audible { GridPositionValue = myGridPositionValue, Target = nearestTarget, Age = 0 });
         }

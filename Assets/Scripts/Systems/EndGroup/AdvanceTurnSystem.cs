@@ -12,11 +12,12 @@ public partial struct SetTurnActiveJob : IJobEntity
     public ComponentLookup<TurnActive> TurnActiveFromEntity;
 
     public float TurnDelayTime;
+    private const float TurnDelayTimeToAnimate = 0.05f;
 
     public void Execute(Entity entity, ref URPMaterialPropertyBaseColor tileColor, [ReadOnly] in TurnsUntilActive turnsUntilActive)
     {
         TurnActiveFromEntity.SetComponentEnabled(entity, turnsUntilActive.Value == 1);
-        tileColor.Value.w = math.select(1.0f, math.select(0.85f, 1.0f, turnsUntilActive.Value == 1), TurnDelayTime >= 0.2);
+        tileColor.Value.w = math.select(1.0f, math.select(0.85f, 1.0f, turnsUntilActive.Value == 1), TurnDelayTime >= TurnDelayTimeToAnimate);
     }
 }
 
@@ -93,7 +94,8 @@ public partial struct AdvanceTurnSystem : ISystem
         var turnDelayTime = gameControllerComponent.turnDelayTime;
         var now = SystemAPI.Time.ElapsedTime;
 
-        // It only takes 1 frame for a unit to take an action, so we disable TurnActive every frame
+        // TurnActive must be cleared unconditionally every frame so that only units whose
+        // TurnsUntilActive reaches 1 on this tick will have it re-enabled by SetTurnActiveJob.
         _turnActiveFromEntity.Update(ref state);
         state.Dependency = new DisableTurnActiveJob
         {

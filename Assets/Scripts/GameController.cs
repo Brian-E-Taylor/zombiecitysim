@@ -8,14 +8,15 @@ public class GameController : MonoBehaviour
     public static GameController Instance { get; private set; }
     public bool MouseBlockedByUI { get; private set; }
 
-    public int numTilesX = 130;
-    public int numTilesY = 130;
-
+    [Header("City Configuration")]
+    public int numTilesX = 900;
+    public int numTilesY = 900;
     public uint citySeed = 0;  // 0 = random seed from time
+    public float turnDelayTime = 0.0f;
 
-    // BSP config (fills gaps between L-System arterials)
-    public int minBlockSize = 12;
-    public int maxBlockSize = 35;
+    [Header("BSP Block Subdivision")]
+    public int minBlockSize = 15;
+    public int maxBlockSize = 40;
     public float splitVariance = 0.2f;
 
     [Header("L-System Arterial Roads")]
@@ -32,22 +33,22 @@ public class GameController : MonoBehaviour
     public float alleyDeadEndProbability = 0.3f;
     public int alleyMaxLength = 12;
 
-    public int numHumans = 1000;
+    [Header("Human Configuration")]
+    public int numHumans = 20000;
     public int humanStartingHealth = 100;
     public int humanDamage = 0;
     public int humanVisionDistance = 10;
-    public int humanTurnDelay = 1;
+    public int humanTurnDelay = 3;
 
-    public int numZombies = 1;
+    [Header("Zombie Configuration")]
+    public int numZombies = 10;
     public int zombieStartingHealth = 70;
     public int zombieDamage = 20;
-    public int zombieVisionDistance = 6;
-    public int zombieHearingDistance = 10;
-    public int zombieTurnDelay = 3;
+    public int zombieVisionDistance = 8;
+    public int zombieHearingDistance = 16;
+    public int zombieTurnDelay = 5;
 
     public int audibleDecayTime = 20;
-
-    public float turnDelayTime = 0.025f;
 
     public InputField numHumansInputField;
     public Slider numHumansSlider;
@@ -85,7 +86,6 @@ public class GameController : MonoBehaviour
         _uiElementsBlocked = 0;
     }
 
-    // Use this for initialization
     void Start()
     {
         numHumansInputField.text = numHumans.ToString();

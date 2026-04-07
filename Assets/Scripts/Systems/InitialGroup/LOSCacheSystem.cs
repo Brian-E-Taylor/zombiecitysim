@@ -8,10 +8,11 @@ using Unity.Mathematics;
 /// Creates the cache on first run, clears it when invalidated, and manages memory.
 /// Runs before other systems that need to use the cache.
 ///
-/// The cache is cleared each frame to prevent unbounded growth and ensure
-/// the capacity is always sufficient for the current frame's LOS checks.
-/// The main benefit of caching is within a single frame where multiple units
-/// may check LOS to the same positions.
+/// The cache persists across frames and is only cleared when static collidables
+/// change (signalled by <see cref="LOSCacheComponent.IsValid"/> being false).
+/// Capacity is grown as needed to fit new LOS entries on top of existing ones.
+/// This provides both intra-frame deduplication (multiple agents checking the
+/// same pair) and cross-frame reuse when geometry is static.
 /// </summary>
 [UpdateInGroup(typeof(InitialGroup))]
 [UpdateAfter(typeof(HashCollidablesSystem))]

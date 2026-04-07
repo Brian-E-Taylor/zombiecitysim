@@ -80,7 +80,8 @@ public static class MovementResolution
     /// Full 3-tier resolution for targeted movement (used by MoveTowardsHumansJob):
     /// 1. Primary axis (larger component of direction)
     /// 2. Secondary axis
-    /// 3. Opposite primary axis (try the other direction on primary)
+    /// 3. Repeated primary axis attempt (currently a no-op if tier 1 already failed with the same
+    ///    direction; to truly try the opposite, negate the direction component before calling)
     /// Returns true if moved. Also sets adjacentToTarget if target is 1 tile away.
     /// </summary>
     [BurstCompile]

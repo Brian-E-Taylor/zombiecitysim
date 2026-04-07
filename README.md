@@ -34,7 +34,7 @@ Each group contains multiple systems that the job scheduler runs in parallel whe
 
 ### The Turn Model
 
-The simulation is turn-based at configurable speed (default 25ms per turn). Each agent type has a **turn delay** -- zombies act every 3 turns, humans every 1. The `AdvanceTurnSystem` decrements per-entity counters and enables a `TurnActive` component tag when an agent's turn arrives. All movement and damage systems filter on `TurnActive`, so agents that aren't acting this turn are skipped entirely with zero cost.
+The simulation is turn-based at configurable speed (default: as fast as possible, `turnDelayTime = 0`). Each agent type has a **turn delay** -- zombies act every 5 turns, humans every 3. The `AdvanceTurnSystem` decrements per-entity counters and enables a `TurnActive` component tag when an agent's turn arrives. All movement and damage systems filter on `TurnActive`, so agents that aren't acting this turn are skipped entirely with zero cost.
 
 This means the effective per-frame workload is a fraction of the total agent count, which is critical for scaling.
 
@@ -83,14 +83,14 @@ The LOS cache is a per-frame `NativeParallelHashMap<ulong, byte>` keyed by packe
 
 Cache writes use `TryAdd` on a `ParallelWriter`, which is atomic and ignores duplicates. This makes the cache safe for concurrent job writes without locks or synchronization.
 
-The cache is cleared every frame. Its benefit is intra-frame deduplication, not cross-frame persistence -- static geometry changes would invalidate it anyway.
+The cache persists across frames and is only cleared when static collidables change (detected via `IsValid` on `LOSCacheComponent`). Its primary benefit is intra-frame deduplication, but it also reuses results across frames as long as the static geometry is unchanged. The capacity grows as needed but is never proactively shrunk.
 
 ## Zombie AI
 
 Zombie decision-making follows a priority hierarchy:
 
-1. **Vision** (range: 6 tiles) -- Scan outward ring by ring. For each human found, verify LOS through buildings. Chase the nearest visible human using Manhattan-distance pathfinding with fallback to adjacent cardinal directions.
-2. **Hearing** (range: 10 tiles) -- If no human is visible, check for audible events. Audible events are created when humans move near zombies and persist for 20 turns, decaying naturally. Zombies move toward the sound source position.
+1. **Vision** (range: 8 tiles) -- Scan outward ring by ring. For each human found, verify LOS through buildings. Chase the nearest visible human using Manhattan-distance pathfinding with fallback to adjacent cardinal directions.
+2. **Hearing** (range: 16 tiles) -- If no human is visible, check for audible events. Audible events are created when humans move near zombies and persist for 20 turns, decaying naturally. Zombies move toward the sound source position.
 3. **Random walk** -- If nothing is detected, pick a random open direction.
 
 Pathfinding is deliberately simple: move one step toward the target along the dominant axis, fall back to the other axis if blocked. This avoids the cost of A* for thousands of agents and produces emergent crowd behavior as zombies funnel through streets and alleys.
@@ -184,15 +184,15 @@ Key parameters exposed in `GameController`:
 
 | Parameter | Default | Effect |
 |-----------|---------|--------|
-| Grid size | 130x130 | City dimensions in tiles |
-| Humans | 1,000 | Starting human population |
-| Zombies | 1 | Starting zombie count |
-| Zombie vision | 6 tiles | Detection range (LOS required) |
-| Zombie hearing | 10 tiles | Sound detection range |
+| Grid size | 900x900 | City dimensions in tiles |
+| Humans | 20,000 | Starting human population |
+| Zombies | 10 | Starting zombie count |
+| Zombie vision | 8 tiles | Detection range (LOS required) |
+| Zombie hearing | 16 tiles | Sound detection range |
 | Human vision | 10 tiles | Flee trigger range |
-| Turn delay | 25ms | Simulation speed |
-| Zombie turn delay | 3 | Zombies act every N turns |
-| Human turn delay | 1 | Humans act every turn |
+| Turn delay | 0 ms | Simulation speed (0 = as fast as possible) |
+| Zombie turn delay | 5 | Zombies act every N turns |
+| Human turn delay | 3 | Humans act every N turns |
 | Audible decay | 20 turns | Sound event lifetime |
 
 All values are adjustable at runtime via UI sliders and input fields. The city can be regenerated with a new seed without restarting.
