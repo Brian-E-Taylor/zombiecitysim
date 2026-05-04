@@ -74,12 +74,6 @@ public partial struct HashCollidablesSystem : ISystem
 
                 SystemAPI.GetSingletonRW<HashStaticCollidableSystemComponent>().ValueRW.HashMap = hashMap;
             }
-
-            // Invalidate the LOS cache since static collidables changed
-            if (SystemAPI.HasSingleton<LOSCacheComponent>())
-            {
-                SystemAPI.GetSingletonRW<LOSCacheComponent>().ValueRW.IsValid = false;
-            }
         }
 
         // Dynamic collidables always need rebuilding each frame since units move

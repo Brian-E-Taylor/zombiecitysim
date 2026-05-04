@@ -1,6 +1,5 @@
 ﻿using Unity.Burst;
 using Unity.Collections;
-using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
@@ -8,20 +7,17 @@ using Unity.Mathematics;
 [BurstCompile]
 public partial struct MoveHumansJob : IJobEntity
 {
+    // Cap on zombies sampled per human when computing the averaged flee direction.
+    // The averaged vector stabilizes well before this; closer rings are visited first,
+    // so the kept samples are the threats that matter most for fleeing.
+    private const int MaxFleeSamples = 8;
+
     public int VisionDistance;
     [ReadOnly] public NativeParallelHashMap<uint, int> HumanVisionHashMap;
 
     [ReadOnly] public NativeParallelHashMap<uint, int> ZombieHashMap;
     [ReadOnly] public NativeParallelHashMap<uint, int> StaticCollidablesHashMap;
     [ReadOnly] public NativeParallelHashMap<uint, int> DynamicCollidablesHashMap;
-
-    // LOS cache for avoiding redundant line-of-sight calculations
-    // NativeDisableContainerSafetyRestriction is safe here because:
-    // - TryGetValue is a read-only operation
-    // - TryAdd uses atomic operations and is thread-safe for concurrent writes
-    [ReadOnly] public NativeParallelHashMap<ulong, byte> LOSCacheRead;
-    [NativeDisableContainerSafetyRestriction]
-    public NativeParallelHashMap<ulong, byte>.ParallelWriter LOSCacheWriter;
 
     public void Execute(ref DesiredNextGridPosition desiredNextGridPosition, [ReadOnly] in GridPosition gridPosition, [ReadOnly] in TurnActive turnActive, [ReadOnly] in Human human)
     {
@@ -43,11 +39,11 @@ public partial struct MoveHumansJob : IJobEntity
         {
             foundTarget = false;
 
-            for (var checkDist = 1; checkDist <= VisionDistance; checkDist++)
+            for (var checkDist = 1; checkDist <= VisionDistance && targetCount < MaxFleeSamples; checkDist++)
             {
-                for (var z = -checkDist; z <= checkDist; z++)
+                for (var z = -checkDist; z <= checkDist && targetCount < MaxFleeSamples; z++)
                 {
-                    for (var x = -checkDist; x <= checkDist; x++)
+                    for (var x = -checkDist; x <= checkDist && targetCount < MaxFleeSamples; x++)
                     {
                         if (math.abs(x) != checkDist && math.abs(z) != checkDist)
                             continue;
@@ -58,21 +54,7 @@ public partial struct MoveHumansJob : IJobEntity
                         if (!ZombieHashMap.TryGetValue(targetKey, out _))
                             continue;
 
-                        // Check LOS cache first, compute and cache if miss
-                        var losKey = GridPositionHash.GetLOSKey(myGridPositionValue.x, myGridPositionValue.z, targetGridPosition.x, targetGridPosition.z);
-                        bool hasLOS;
-                        if (LOSCacheRead.TryGetValue(losKey, out var cachedLOS))
-                        {
-                            hasLOS = cachedLOS == 1;
-                        }
-                        else
-                        {
-                            hasLOS = LineOfSightUtilities.InLineOfSightUpdated(myGridPositionValue, targetGridPosition, StaticCollidablesHashMap);
-                            // Cache the result (TryAdd is safe from parallel writes - duplicates are ignored)
-                            LOSCacheWriter.TryAdd(losKey, hasLOS ? (byte)1 : (byte)0);
-                        }
-
-                        if (!hasLOS)
+                        if (!LineOfSightUtilities.InLineOfSightUpdated(myGridPositionValue, targetGridPosition, StaticCollidablesHashMap))
                             continue;
 
                         averageTarget += new float3(x, 0, z);
@@ -142,7 +124,6 @@ public partial struct MoveHumansSystem : ISystem
         state.RequireForUpdate<HashStaticCollidableSystemComponent>();
         state.RequireForUpdate<HashDynamicCollidableSystemComponent>();
         state.RequireForUpdate<GameControllerComponent>();
-        state.RequireForUpdate<LOSCacheComponent>();
         state.RequireForUpdate<HashZombiePositionsComponent>();
     }
 
@@ -188,9 +169,6 @@ public partial struct MoveHumansSystem : ISystem
             humansVisionHandle
         );
 
-        // Get LOS cache for this frame
-        var losCacheComponent = SystemAPI.GetSingleton<LOSCacheComponent>();
-
         state.Dependency = new MoveHumansJob
         {
             VisionDistance = gameControllerComponent.humanVisionDistance,
@@ -199,10 +177,6 @@ public partial struct MoveHumansSystem : ISystem
             ZombieHashMap = zombiePositionsComponent.HashMap,
             StaticCollidablesHashMap = staticCollidableHashMap,
             DynamicCollidablesHashMap = dynamicCollidableHashMap,
-
-            // LOS cache - read from existing cache, write new entries via parallel writer
-            LOSCacheRead = losCacheComponent.Cache,
-            LOSCacheWriter = losCacheComponent.Cache.AsParallelWriter(),
         }.ScheduleParallel(state.Dependency);
     }
 

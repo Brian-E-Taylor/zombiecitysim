@@ -96,7 +96,7 @@ public partial struct TileUnitSpawnerSystem : ISystem
     public void OnCreate(ref SystemState state)
     {
         _regenerateComponentsQuery = state.GetEntityQuery(new EntityQueryBuilder(Allocator.Temp)
-            .WithAny<GridPosition, RoadSurface, HashDynamicCollidableSystemComponent, HashStaticCollidableSystemComponent, LOSCacheComponent, HashHumanPositionsComponent, HashZombiePositionsComponent>());
+            .WithAny<GridPosition, RoadSurface, HashDynamicCollidableSystemComponent, HashStaticCollidableSystemComponent, HashHumanPositionsComponent, HashZombiePositionsComponent>());
 
         state.RequireForUpdate<SpawnWorld>();
         state.RequireForUpdate<TileUnitSpawner_Data>();
@@ -119,10 +119,6 @@ public partial struct TileUnitSpawnerSystem : ISystem
 
         var dynamicComponentEntity = state.EntityManager.CreateEntity();
         state.EntityManager.AddComponent(dynamicComponentEntity, ComponentType.ReadOnly<HashDynamicCollidableSystemComponent>());
-
-        // Create LOS cache singleton for caching line-of-sight calculations
-        var losCacheEntity = state.EntityManager.CreateEntity();
-        state.EntityManager.AddComponent(losCacheEntity, ComponentType.ReadWrite<LOSCacheComponent>());
 
         // Create shared unit position hash map singletons
         var humanHashEntity = state.EntityManager.CreateEntity();
