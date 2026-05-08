@@ -14,6 +14,7 @@ public partial struct MoveHumansJob : IJobEntity
 
     public int VisionDistance;
     [ReadOnly] public NativeParallelHashMap<uint, int> HumanVisionHashMap;
+    [ReadOnly] public NativeArray<int2> VisionOffsets;
 
     [ReadOnly] public NativeParallelHashMap<uint, int> ZombieHashMap;
     [ReadOnly] public NativeParallelHashMap<uint, int> StaticCollidablesHashMap;
@@ -39,30 +40,23 @@ public partial struct MoveHumansJob : IJobEntity
         {
             foundTarget = false;
 
-            for (var checkDist = 1; checkDist <= VisionDistance && targetCount < MaxFleeSamples; checkDist++)
+            // Walk the precomputed circular offset table (sorted by squared distance).
+            // Closest threats are visited first, so MaxFleeSamples keeps the most relevant ones.
+            for (var i = 0; i < VisionOffsets.Length && targetCount < MaxFleeSamples; i++)
             {
-                for (var z = -checkDist; z <= checkDist && targetCount < MaxFleeSamples; z++)
-                {
-                    for (var x = -checkDist; x <= checkDist && targetCount < MaxFleeSamples; x++)
-                    {
-                        if (math.abs(x) != checkDist && math.abs(z) != checkDist)
-                            continue;
+                var off = VisionOffsets[i];
+                var targetGridPosition = new int3(myGridPositionValue.x + off.x, myGridPositionValue.y, myGridPositionValue.z + off.y);
+                var targetKey = GridPositionHash.GetKey(targetGridPosition.x, targetGridPosition.z);
 
-                        var targetGridPosition = new int3(myGridPositionValue.x + x, myGridPositionValue.y, myGridPositionValue.z + z);
-                        var targetKey = GridPositionHash.GetKey(targetGridPosition.x, targetGridPosition.z);
+                if (!ZombieHashMap.TryGetValue(targetKey, out _))
+                    continue;
 
-                        if (!ZombieHashMap.TryGetValue(targetKey, out _))
-                            continue;
+                if (!LineOfSightUtilities.InLineOfSightUpdated(myGridPositionValue, targetGridPosition, StaticCollidablesHashMap))
+                    continue;
 
-                        if (!LineOfSightUtilities.InLineOfSightUpdated(myGridPositionValue, targetGridPosition, StaticCollidablesHashMap))
-                            continue;
-
-                        averageTarget += new float3(x, 0, z);
-                        targetCount++;
-
-                        foundTarget = true;
-                    }
-                }
+                averageTarget += new float3(off.x, 0, off.y);
+                targetCount++;
+                foundTarget = true;
             }
         }
 
@@ -112,6 +106,11 @@ public partial struct MoveHumansSystem : ISystem
     // Exact zombie positions for per-tile checks come from HashZombiePositionsComponent (ZombieHashMap).
     private NativeParallelHashMap<uint, int> _humanVisionHashMap;
 
+    // Circular offset table (sorted by squared distance) for the per-tile vision scan.
+    // Rebuilt lazily when humanVisionDistance changes.
+    private NativeArray<int2> _visionOffsets;
+    private int _visionOffsetsRadius;
+
     private const int InitialPoolCapacity = 256;
 
     public void OnCreate(ref SystemState state)
@@ -148,6 +147,8 @@ public partial struct MoveHumansSystem : ISystem
         if (!staticCollidableHashMap.IsCreated || !dynamicCollidableHashMap.IsCreated)
             return;
 
+        EnsureOffsets(ref _visionOffsets, ref _visionOffsetsRadius, gameControllerComponent.humanVisionDistance);
+
         var zombieCount = _zombieQuery.CalculateEntityCount();
 
         var cellSize = gameControllerComponent.humanVisionDistance * 2 + 1;
@@ -173,6 +174,7 @@ public partial struct MoveHumansSystem : ISystem
         {
             VisionDistance = gameControllerComponent.humanVisionDistance,
             HumanVisionHashMap = _humanVisionHashMap,
+            VisionOffsets = _visionOffsets,
 
             ZombieHashMap = zombiePositionsComponent.HashMap,
             StaticCollidablesHashMap = staticCollidableHashMap,
@@ -183,5 +185,15 @@ public partial struct MoveHumansSystem : ISystem
     public void OnDestroy(ref SystemState state)
     {
         if (_humanVisionHashMap.IsCreated) _humanVisionHashMap.Dispose();
+        if (_visionOffsets.IsCreated) _visionOffsets.Dispose();
+    }
+
+    private static void EnsureOffsets(ref NativeArray<int2> offsets, ref int cachedRadius, int currentRadius)
+    {
+        if (offsets.IsCreated && cachedRadius == currentRadius)
+            return;
+        if (offsets.IsCreated) offsets.Dispose();
+        offsets = VisionOffsets.Build(currentRadius, Allocator.Persistent);
+        cachedRadius = currentRadius;
     }
 }

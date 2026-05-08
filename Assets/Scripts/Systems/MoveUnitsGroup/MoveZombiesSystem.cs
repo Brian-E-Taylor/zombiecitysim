@@ -11,8 +11,10 @@ public partial struct MoveZombiesJob : IJobEntity
 
     public int HearingDistance;
     [ReadOnly] public NativeParallelHashMap<uint, int> ZombieHearingHashMap;
+    [ReadOnly] public NativeArray<int2> HearingOffsets;
     public int VisionDistance;
     [ReadOnly] public NativeParallelHashMap<uint, int> ZombieVisionHashMap;
+    [ReadOnly] public NativeArray<int2> VisionOffsets;
 
     [ReadOnly] public NativeParallelHashMap<uint, int> HumanHashMap;
     [ReadOnly] public NativeParallelMultiHashMap<uint, int3> AudibleHashMap;
@@ -39,37 +41,24 @@ public partial struct MoveZombiesJob : IJobEntity
         {
             foundBySight = false;
 
-            // Get nearest target
-            // Check all grid positions that are checkDist away in the x or z direction
-            for (var checkDist = 1; checkDist <= VisionDistance && !foundTarget; checkDist++)
+            // Walk the precomputed circular offset table (sorted by squared distance).
+            // First valid hit is the geometrically nearest visible human.
+            for (var i = 0; i < VisionOffsets.Length; i++)
             {
-                float nearestDistance = (checkDist + 2) * (checkDist + 2);
-                for (var z = -checkDist; z <= checkDist; z++)
-                {
-                    for (var x = -checkDist; x <= checkDist; x++)
-                    {
-                        if (math.abs(x) != checkDist && math.abs(z) != checkDist)
-                            continue;
+                var off = VisionOffsets[i];
+                var targetGridPosition = new int3(myGridPositionValue.x + off.x, myGridPositionValue.y, myGridPositionValue.z + off.y);
+                var targetKey = GridPositionHash.GetKey(targetGridPosition.x, targetGridPosition.z);
 
-                        var targetGridPosition = new int3(myGridPositionValue.x + x, myGridPositionValue.y, myGridPositionValue.z + z);
-                        var targetKey = GridPositionHash.GetKey(targetGridPosition.x, targetGridPosition.z);
+                if (!HumanHashMap.TryGetValue(targetKey, out _))
+                    continue;
 
-                        if (checkDist > VisionDistance || !HumanHashMap.TryGetValue(targetKey, out _))
-                            continue;
+                if (!LineOfSightUtilities.InLineOfSightUpdated(myGridPositionValue, targetGridPosition, StaticCollidablesHashMap))
+                    continue;
 
-                        if (!LineOfSightUtilities.InLineOfSightUpdated(myGridPositionValue, targetGridPosition, StaticCollidablesHashMap))
-                            continue;
-
-                        var distance = math.lengthsq(new float3(myGridPositionValue) - new float3(targetGridPosition));
-                        var nearest = distance < nearestDistance;
-
-                        nearestDistance = math.select(nearestDistance, distance, nearest);
-                        nearestTarget = math.select(nearestTarget, targetGridPosition, nearest);
-
-                        foundBySight = true;
-                        foundTarget = true;
-                    }
-                }
+                nearestTarget = targetGridPosition;
+                foundBySight = true;
+                foundTarget = true;
+                break;
             }
         }
 
@@ -82,33 +71,20 @@ public partial struct MoveZombiesJob : IJobEntity
 
             if (foundByHearing)
             {
-                // Get nearest target
-                // Check all grid positions that are checkDist away in the x or z direction
-                for (var checkDist = 1; checkDist <= HearingDistance && !foundTarget; checkDist++)
+                // Walk the precomputed circular offset table (sorted by squared distance).
+                // First audible cell encountered is the geometrically nearest sound source.
+                for (var i = 0; i < HearingOffsets.Length; i++)
                 {
-                    float nearestDistance = (checkDist + 2) * (checkDist + 2);
-                    for (var z = -checkDist; z <= checkDist; z++)
-                    {
-                        for (var x = -checkDist; x <= checkDist; x++)
-                        {
-                            if (math.abs(x) != checkDist && math.abs(z) != checkDist)
-                                continue;
+                    var off = HearingOffsets[i];
+                    var targetGridPosition = new int3(myGridPositionValue.x + off.x, myGridPositionValue.y, myGridPositionValue.z + off.y);
+                    var targetKey = GridPositionHash.GetKey(targetGridPosition.x, targetGridPosition.z);
 
-                            var targetGridPosition = new int3(myGridPositionValue.x + x, myGridPositionValue.y, myGridPositionValue.z + z);
-                            var targetKey = GridPositionHash.GetKey(targetGridPosition.x, targetGridPosition.z);
+                    if (!AudibleHashMap.TryGetFirstValue(targetKey, out var audibleTarget, out _))
+                        continue;
 
-                            if (checkDist > HearingDistance || !AudibleHashMap.TryGetFirstValue(targetKey, out var audibleTarget, out _))
-                                continue;
-
-                            var distance = math.lengthsq(new float3(myGridPositionValue) - new float3(targetGridPosition));
-                            var nearest = distance < nearestDistance;
-
-                            nearestDistance = math.select(nearestDistance, distance, nearest);
-                            nearestTarget = math.select(nearestTarget, audibleTarget, nearest);
-
-                            foundTarget = true;
-                        }
-                    }
+                    nearestTarget = audibleTarget;
+                    foundTarget = true;
+                    break;
                 }
             }
         }
@@ -166,6 +142,13 @@ public partial struct MoveZombiesSystem : ISystem
     private NativeParallelMultiHashMap<uint, int3> _audibleHashMap;
     private NativeParallelHashMap<uint, int> _zombieHearingHashMap;
 
+    // Circular offset tables (sorted by squared distance) for the per-tile vision/hearing scans.
+    // Rebuilt lazily when the active radius changes.
+    private NativeArray<int2> _visionOffsets;
+    private int _visionOffsetsRadius;
+    private NativeArray<int2> _hearingOffsets;
+    private int _hearingOffsetsRadius;
+
     private const int InitialPoolCapacity = 256;
 
     public void OnCreate(ref SystemState state)
@@ -197,6 +180,9 @@ public partial struct MoveZombiesSystem : ISystem
 
         state.Dependency = JobHandle.CombineDependencies(state.Dependency, staticCollidableComponent.Handle, dynamicCollidableComponent.Handle);
         state.Dependency = JobHandle.CombineDependencies(state.Dependency, humanPositionsComponent.Handle);
+
+        EnsureOffsets(ref _visionOffsets, ref _visionOffsetsRadius, gameControllerComponent.zombieVisionDistance);
+        EnsureOffsets(ref _hearingOffsets, ref _hearingOffsetsRadius, gameControllerComponent.zombieHearingDistance);
 
         var cellSize = gameControllerComponent.zombieVisionDistance * 2 + 1;
         var cellCount = math.asint(math.ceil((float)gameControllerComponent.numTilesX / cellSize * gameControllerComponent.numTilesY / cellSize));
@@ -259,8 +245,10 @@ public partial struct MoveZombiesSystem : ISystem
 
             HearingDistance = gameControllerComponent.zombieHearingDistance,
             ZombieHearingHashMap = _zombieHearingHashMap,
+            HearingOffsets = _hearingOffsets,
             VisionDistance = gameControllerComponent.zombieVisionDistance,
             ZombieVisionHashMap = _zombieVisionHashMap,
+            VisionOffsets = _visionOffsets,
 
             HumanHashMap = humanPositionsComponent.HashMap,
             AudibleHashMap = _audibleHashMap,
@@ -274,5 +262,16 @@ public partial struct MoveZombiesSystem : ISystem
         if (_zombieVisionHashMap.IsCreated) _zombieVisionHashMap.Dispose();
         if (_audibleHashMap.IsCreated) _audibleHashMap.Dispose();
         if (_zombieHearingHashMap.IsCreated) _zombieHearingHashMap.Dispose();
+        if (_visionOffsets.IsCreated) _visionOffsets.Dispose();
+        if (_hearingOffsets.IsCreated) _hearingOffsets.Dispose();
+    }
+
+    private static void EnsureOffsets(ref NativeArray<int2> offsets, ref int cachedRadius, int currentRadius)
+    {
+        if (offsets.IsCreated && cachedRadius == currentRadius)
+            return;
+        if (offsets.IsCreated) offsets.Dispose();
+        offsets = VisionOffsets.Build(currentRadius, Allocator.Persistent);
+        cachedRadius = currentRadius;
     }
 }
