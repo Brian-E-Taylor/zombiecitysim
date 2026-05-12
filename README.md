@@ -142,8 +142,6 @@ City regenerates with a new seed at runtime without a domain reload.
 ## Potential Future Work
 
 - **Flow-field pathfinding** — current dominant-axis movement gets zombies stuck on concave corners. A flow field computed per frame from the horde center would give global pathing at O(grid) shared across all agents.
-- **Circle-aware vision broadphase** — the ring scan currently checks corners outside the circular vision radius. A precomputed offset table would skip those.
 - **Population dynamics** — humans always become zombies, so the curve is monotonic. Survivor spawning, safe zones, or zombie decay would create longer-term equilibria.
 - **Instanced agent rendering** — at 50k+ agents, hybrid rendering becomes the bottleneck. Pure shader-instanced or impostor sprites at distance would push the ceiling.
 - **Burst-compiled city generation** — spawn runs on the main thread because of mesh APIs. Splitting tile layout (Burst job) from mesh emission (main thread) would shorten regeneration stalls.
-- **Native container disposal on regen** — singleton entities holding native containers get destroyed without explicit disposal on regenerate. Hooking disposal before destruction would close the small leak.
