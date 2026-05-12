@@ -39,8 +39,17 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
     {
         foreach (var obj in _generatedObjects)
         {
-            if (obj != null)
-                Destroy(obj);
+            if (obj == null)
+                continue;
+
+            // Mesh assets are independent UnityEngine.Objects — destroying the GameObject
+            // does NOT release the Mesh. Without this, every regenerate leaks every cell
+            // mesh (and its native vertex/index buffers).
+            var meshFilter = obj.GetComponent<MeshFilter>();
+            if (meshFilter != null && meshFilter.sharedMesh != null)
+                Destroy(meshFilter.sharedMesh);
+
+            Destroy(obj);
         }
         _generatedObjects.Clear();
     }

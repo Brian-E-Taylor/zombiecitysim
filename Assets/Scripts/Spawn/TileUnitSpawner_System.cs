@@ -96,7 +96,7 @@ public partial struct TileUnitSpawnerSystem : ISystem
     public void OnCreate(ref SystemState state)
     {
         _regenerateComponentsQuery = state.GetEntityQuery(new EntityQueryBuilder(Allocator.Temp)
-            .WithAny<GridPosition, RoadSurface, HashDynamicCollidableSystemComponent, HashStaticCollidableSystemComponent, HashHumanPositionsComponent, HashZombiePositionsComponent>());
+            .WithAny<GridPosition, RoadSurface, Audible, HashDynamicCollidableSystemComponent, HashStaticCollidableSystemComponent, HashHumanPositionsComponent, HashZombiePositionsComponent>());
 
         state.RequireForUpdate<SpawnWorld>();
         state.RequireForUpdate<TileUnitSpawner_Data>();
@@ -112,6 +112,13 @@ public partial struct TileUnitSpawnerSystem : ISystem
             state.EntityManager.DestroyEntity(runWorldEntity);
 
         state.EntityManager.DestroyEntity(SystemAPI.GetSingletonEntity<SpawnWorld>());
+
+        // Dispose native containers held by singletons that the next call destroys.
+        // The static/dynamic collidable maps live on those singletons (allocated by
+        // HashCollidablesSystem). Without this, each regenerate would leak both maps —
+        // HashCollidablesSystem.OnDestroy only fires on world teardown.
+        DisposeRegenerateNativeContainers(ref state);
+
         state.EntityManager.DestroyEntity(_regenerateComponentsQuery);
 
         var staticComponentEntity = state.EntityManager.CreateEntity();
@@ -214,6 +221,31 @@ public partial struct TileUnitSpawnerSystem : ISystem
         buildingMeshDataNativeList.Dispose();
 
         state.EntityManager.CreateSingleton<RunWorld>();
+    }
+
+    /// <summary>
+    /// Disposes the native containers held by singleton components that are about to be
+    /// destroyed during a regenerate. Note: only the static/dynamic collidable maps are
+    /// owned by their singletons; HashHumanPositionsComponent/HashZombiePositionsComponent
+    /// are aliases for system-owned maps in HashUnitPositionsSystem and must not be disposed here.
+    /// </summary>
+    private void DisposeRegenerateNativeContainers(ref SystemState state)
+    {
+        if (SystemAPI.HasSingleton<HashStaticCollidableSystemComponent>())
+        {
+            var staticComponent = SystemAPI.GetSingletonRW<HashStaticCollidableSystemComponent>();
+            staticComponent.ValueRW.Handle.Complete();
+            if (staticComponent.ValueRO.HashMap.IsCreated)
+                staticComponent.ValueRW.HashMap.Dispose();
+        }
+
+        if (SystemAPI.HasSingleton<HashDynamicCollidableSystemComponent>())
+        {
+            var dynamicComponent = SystemAPI.GetSingletonRW<HashDynamicCollidableSystemComponent>();
+            dynamicComponent.ValueRW.Handle.Complete();
+            if (dynamicComponent.ValueRO.HashMap.IsCreated)
+                dynamicComponent.ValueRW.HashMap.Dispose();
+        }
     }
 
     /// <summary>
