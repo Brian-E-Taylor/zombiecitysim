@@ -1,3 +1,4 @@
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Mathematics;
 
@@ -13,6 +14,7 @@ public struct LineSegment
     public float2 End;
 }
 
+[BurstCompile]
 public static class LSystemArterialGenerator
 {
     private const int MaxStringLength = 4096;
@@ -21,6 +23,7 @@ public static class LSystemArterialGenerator
     /// Generates organic arterial roads using L-System grammar, turtle graphics, and rasterization.
     /// Creates a comprehensive road network with spines, branches, and connectors.
     /// </summary>
+    [BurstCompile]
     public static void GenerateArterials(
         ref NativeArray<bool> tileExists,
         ref NativeArray<byte> roadHierarchy,
