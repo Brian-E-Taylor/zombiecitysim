@@ -1,3 +1,4 @@
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Mathematics;
 
@@ -32,6 +33,7 @@ public struct BuildingRegion
     public float AspectRatio => (float)math.max(Width, Height) / math.max(1, math.min(Width, Height));
 }
 
+[BurstCompile]
 public static class BuildingRegionDetector
 {
     /// <summary>
@@ -42,6 +44,7 @@ public static class BuildingRegionDetector
     /// <param name="numTilesY">Grid height</param>
     /// <param name="regionIds">Output array mapping each cell to its region ID (0 = no region/road)</param>
     /// <param name="regions">Output list of detected regions</param>
+    [BurstCompile]
     public static void DetectRegions(
         ref NativeArray<bool> tileExists,
         int numTilesX,

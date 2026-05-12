@@ -1,11 +1,14 @@
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Mathematics;
 
+[BurstCompile]
 public static class AlleyGenerator
 {
     /// <summary>
     /// Generates alleys and dead-ends within large building regions using random walk algorithm.
     /// </summary>
+    [BurstCompile]
     public static void GenerateAlleys(
         ref NativeArray<bool> tileExists,
         ref NativeArray<byte> roadHierarchy,
@@ -98,13 +101,11 @@ public static class AlleyGenerator
 
                 // Check if any neighbor is a road (not a building)
                 var bordersRoad = false;
-                var neighbors = new[]
-                {
-                    new int2(x - 1, y),
-                    new int2(x + 1, y),
-                    new int2(x, y - 1),
-                    new int2(x, y + 1)
-                };
+                var neighbors = new NativeArray<int2>(4, Allocator.Temp);
+                neighbors[0] = new int2(x - 1, y);
+                neighbors[1] = new int2(x + 1, y);
+                neighbors[2] = new int2(x, y - 1);
+                neighbors[3] = new int2(x, y + 1);
 
                 foreach (var neighbor in neighbors)
                 {
@@ -172,13 +173,11 @@ public static class AlleyGenerator
             var bestNext = new int2(-1, -1);
             var bestScore = float.MinValue;
 
-            var directions = new[]
-            {
-                new int2(1, 0),
-                new int2(-1, 0),
-                new int2(0, 1),
-                new int2(0, -1)
-            };
+            var directions = new NativeArray<int2>(4, Allocator.Temp);
+            directions[0] = new int2(1, 0);
+            directions[1] = new int2(-1, 0);
+            directions[2] = new int2(0, 1);
+            directions[3] = new int2(0, -1);
 
             foreach (var dir in directions)
             {
@@ -234,13 +233,11 @@ public static class AlleyGenerator
             current = bestNext;
 
             // Check if we've reached the opposite side (connects to a road)
-            var checkNeighbors = new[]
-            {
-                new int2(current.x - 1, current.y),
-                new int2(current.x + 1, current.y),
-                new int2(current.x, current.y - 1),
-                new int2(current.x, current.y + 1)
-            };
+            var checkNeighbors = new NativeArray<int2>(4, Allocator.Temp);
+            checkNeighbors[0] = new int2(current.x - 1, current.y);
+            checkNeighbors[0] = new int2(current.x + 1, current.y);
+            checkNeighbors[0] = new int2(current.x, current.y - 1);
+            checkNeighbors[0] = new int2(current.x, current.y + 1);
 
             foreach (var neighbor in checkNeighbors)
             {

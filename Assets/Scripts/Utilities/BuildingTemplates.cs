@@ -1,3 +1,4 @@
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Mathematics;
 
@@ -25,11 +26,13 @@ public struct BuildingTemplate
     public float SpawnProbability; // Weight for random selection
 }
 
+[BurstCompile]
 public static class BuildingTemplates
 {
     /// <summary>
     /// Applies building templates to detected regions, assigning BuildingIds and Heights.
     /// </summary>
+    [BurstCompile]
     public static void ApplyTemplatesToRegions(
         ref NativeArray<bool> tileExists,
         ref NativeArray<ushort> regionIds,

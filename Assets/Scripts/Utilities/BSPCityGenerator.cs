@@ -1,3 +1,4 @@
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Mathematics;
 
@@ -17,6 +18,7 @@ public struct RoadSplit
     public byte Depth;      // For hierarchy
 }
 
+[BurstCompile]
 public static class BSPCityGenerator
 {
     private struct BSPNode
@@ -29,6 +31,7 @@ public static class BSPCityGenerator
     /// <summary>
     /// Generates city blocks using BSP, optionally respecting pre-marked arterial roads.
     /// </summary>
+    [BurstCompile]
     public static void GenerateBlocks(
         int numTilesX,
         int numTilesY,
@@ -263,6 +266,7 @@ public static class BSPCityGenerator
         nodeStack.Dispose();
     }
 
+    [BurstCompile]
     public static void ApplyRoadsToGridWithHierarchy(
         ref NativeArray<bool> tileExists,
         ref NativeArray<byte> roadHierarchy,

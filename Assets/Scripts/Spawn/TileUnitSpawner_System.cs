@@ -86,6 +86,28 @@ public struct SpawnJob : IJobParallelFor
     }
 }
 
+[BurstCompile]
+public struct GenerateCityLayoutJob : IJob
+{
+    public GameControllerComponent GameController;
+    public NativeArray<Unity.Mathematics.Random> Rng;
+    public NativeArray<bool> TileExists;
+    public NativeArray<byte> RoadHierarchy;
+    public NativeArray<ushort> RegionIds;
+    public NativeArray<ushort> BuildingIds;
+    public NativeArray<byte> BuildingHeights;
+
+    public void Execute()
+    {
+        var rng = Rng[0];
+        TileUnitSpawnerSystem.GenerateCity(
+            ref GameController, ref rng,
+            ref TileExists, ref RoadHierarchy,
+            ref RegionIds, ref BuildingIds, ref BuildingHeights);
+        Rng[0] = rng;
+    }
+}
+
 [UpdateInGroup(typeof(InitializationSystemGroup))]
 [RequireMatchingQueriesForUpdate]
 public partial struct TileUnitSpawnerSystem : ISystem
@@ -150,14 +172,30 @@ public partial struct TileUnitSpawnerSystem : ISystem
         var tileUnitBuildingIds = new NativeList<ushort>(Allocator.Temp);
 
         var gridSize = gameControllerComponent.numTilesY * gameControllerComponent.numTilesX;
-        var tileExists = new NativeArray<bool>(gridSize, Allocator.Temp);
-        var roadHierarchy = new NativeArray<byte>(gridSize, Allocator.Temp);
-        var regionIds = new NativeArray<ushort>(gridSize, Allocator.Temp);
-        var buildingIds = new NativeArray<ushort>(gridSize, Allocator.Temp);
-        var buildingHeights = new NativeArray<byte>(gridSize, Allocator.Temp);
+        // TempJob (not Temp) so the arrays can cross to the GenerateCityLayoutJob worker thread.
+        var tileExists = new NativeArray<bool>(gridSize, Allocator.TempJob);
+        var roadHierarchy = new NativeArray<byte>(gridSize, Allocator.TempJob);
+        var regionIds = new NativeArray<ushort>(gridSize, Allocator.TempJob);
+        var buildingIds = new NativeArray<ushort>(gridSize, Allocator.TempJob);
+        var buildingHeights = new NativeArray<byte>(gridSize, Allocator.TempJob);
 
         // Phase 1: Generate city layout (L-system arterials + BSP + regions + templates + alleys)
-        GenerateCity(ref gameControllerComponent, ref rng, ref tileExists, ref roadHierarchy, ref regionIds, ref buildingIds, ref buildingHeights);
+        // Random is a value type — round-trip it through a 1-element array so RNG state advanced
+        // inside the job is observed by the main-thread SpawnUnits shuffle (keeps determinism by seed).
+        var rngArray = new NativeArray<Unity.Mathematics.Random>(1, Allocator.TempJob);
+        rngArray[0] = rng;
+        new GenerateCityLayoutJob
+        {
+            GameController = gameControllerComponent,
+            Rng = rngArray,
+            TileExists = tileExists,
+            RoadHierarchy = roadHierarchy,
+            RegionIds = regionIds,
+            BuildingIds = buildingIds,
+            BuildingHeights = buildingHeights,
+        }.Schedule().Complete();
+        rng = rngArray[0];
+        rngArray.Dispose();
 
         // Phase 2: Collect building tiles into spawn lists
         CollectBuildingTiles(ref gameControllerComponent, ref tileExists, ref buildingHeights, ref buildingIds,
@@ -251,8 +289,9 @@ public partial struct TileUnitSpawnerSystem : ISystem
     /// <summary>
     /// Runs the procedural city generation pipeline: L-system arterials, BSP block subdivision,
     /// region detection, building template application, and alley generation.
+    /// Internal so GenerateCityLayoutJob can invoke it from a Burst-compiled job.
     /// </summary>
-    private static void GenerateCity(
+    internal static void GenerateCity(
         ref GameControllerComponent gameControllerComponent,
         ref Unity.Mathematics.Random rng,
         ref NativeArray<bool> tileExists,
