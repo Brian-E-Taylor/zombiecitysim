@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text;
 using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -24,6 +25,12 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
     private const int SpatialCellSize = 16;
 
     private readonly List<GameObject> _generatedObjects = new();
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics()
+    {
+        Instance = null;
+    }
 
     private void Awake()
     {
@@ -106,6 +113,7 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
         const int verticesPerCube = 20; // 5 faces (no bottom)
         const int maxBuildingsPerBatch = maxVerticesPerMesh / verticesPerCube;
 
+        var sb = new StringBuilder(30);
         foreach (var (cellKey, cellBuildings) in spatialCells)
         {
             var cellX = cellKey % cellsX;
@@ -117,10 +125,17 @@ public class ProceduralCityMeshGenerator : MonoBehaviour
             {
                 var count = Mathf.Min(maxBuildingsPerBatch, cellBuildings.Count - i);
                 var mesh = GenerateBatchedMesh(cellBuildings, i, count, 1.0f);
-                var objName = batchIndex == 0
-                    ? $"CityCell_{cellX}_{cellZ}"
-                    : $"CityCell_{cellX}_{cellZ}_{batchIndex}";
-                var obj = CreateMeshObject(objName, mesh, buildingMaterial);
+                sb.Clear();
+                sb.Append("CityCell_");
+                sb.Append(cellX);
+                sb.Append("_");
+                sb.Append(cellZ);
+                if (batchIndex != 0)
+                {
+                    sb.Append("_");
+                    sb.Append(batchIndex);
+                }
+                var obj = CreateMeshObject(sb.ToString(), mesh, buildingMaterial);
                 _generatedObjects.Add(obj);
                 batchIndex++;
             }

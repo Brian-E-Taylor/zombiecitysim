@@ -75,7 +75,7 @@ public partial class UpdateGameControllerComponentSystem : SystemBase
         // Generate random seed if citySeed is 0 (done here since SystemBase is not Burst-compiled)
         var seed = GameController.Instance.citySeed;
         if (seed == 0)
-            seed = (uint)DateTime.Now.Ticks;
+            seed = (uint)DateTime.UtcNow.Ticks;
         gameControllerComponent.ValueRW.citySeed = seed;
 
         gameControllerComponent.ValueRW.minBlockSize = GameController.Instance.minBlockSize;
