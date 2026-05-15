@@ -143,4 +143,3 @@ City regenerates with a new seed at runtime without a domain reload.
 
 - **Flow-field pathfinding** — current dominant-axis movement gets zombies stuck on concave corners. A flow field computed per frame from the horde center would give global pathing at O(grid) shared across all agents.
 - **Population dynamics** — humans always become zombies, so the curve is monotonic. Survivor spawning, safe zones, or zombie decay would create longer-term equilibria.
-- **Instanced agent rendering** — at 50k+ agents, hybrid rendering becomes the bottleneck. Pure shader-instanced or impostor sprites at distance would push the ceiling.
