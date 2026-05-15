@@ -84,6 +84,45 @@ public class GameController : MonoBehaviour
         DontDestroyOnLoad(gameObject);
 
         _uiElementsBlocked = 0;
+
+        ApplyCommandLineOverrides();
+    }
+
+    private void ApplyCommandLineOverrides()
+    {
+        var args = System.Environment.GetCommandLineArgs();
+        for (int i = 1; i < args.Length - 1; i++)
+        {
+            var value = args[i + 1];
+            switch (args[i])
+            {
+                case "--tiles-x":
+                    if (int.TryParse(value, out var tx)) numTilesX = tx;
+                    break;
+                case "--tiles-y":
+                    if (int.TryParse(value, out var ty)) numTilesY = ty;
+                    break;
+                case "--seed":
+                    if (uint.TryParse(value, out var seed)) citySeed = seed;
+                    break;
+                case "--humans":
+                    if (int.TryParse(value, out var nh)) numHumans = nh;
+                    break;
+                case "--zombies":
+                    if (int.TryParse(value, out var nz)) numZombies = nz;
+                    break;
+                case "--human-turn-delay":
+                    if (int.TryParse(value, out var htd)) humanTurnDelay = htd;
+                    break;
+                case "--zombie-turn-delay":
+                    if (int.TryParse(value, out var ztd)) zombieTurnDelay = ztd;
+                    break;
+                case "--turn-delay-time":
+                    if (float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var tdt))
+                        turnDelayTime = tdt;
+                    break;
+            }
+        }
     }
 
     void Start()
