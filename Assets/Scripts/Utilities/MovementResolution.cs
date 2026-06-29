@@ -77,11 +77,8 @@ public static class MovementResolution
     }
 
     /// <summary>
-    /// Full 3-tier resolution for targeted movement (used by MoveTowardsHumansJob):
     /// 1. Primary axis (larger component of direction)
     /// 2. Secondary axis
-    /// 3. Repeated primary axis attempt (currently a no-op if tier 1 already failed with the same
-    ///    direction; to truly try the opposite, negate the direction component before calling)
     /// Returns true if moved. Also sets adjacentToTarget if target is 1 tile away.
     /// </summary>
     [BurstCompile]
@@ -107,12 +104,6 @@ public static class MovementResolution
                 moved = TryMoveOnAxis(ref pos, direction.z, false, downKey, upKey,
                     ref downAvail, ref upAvail, ref downChecked, ref upChecked, staticMap, dynamicMap);
             }
-            // Tier 3: try opposite primary
-            if (!moved)
-            {
-                moved = TryMoveOnAxis(ref pos, direction.x, true, leftKey, rightKey,
-                    ref leftAvail, ref rightAvail, ref leftChecked, ref rightChecked, staticMap, dynamicMap);
-            }
         }
         else
         {
@@ -123,12 +114,6 @@ public static class MovementResolution
             {
                 moved = TryMoveOnAxis(ref pos, direction.x, true, leftKey, rightKey,
                     ref leftAvail, ref rightAvail, ref leftChecked, ref rightChecked, staticMap, dynamicMap);
-            }
-            // Tier 3: try opposite secondary
-            if (!moved)
-            {
-                moved = TryMoveOnAxis(ref pos, direction.z, false, downKey, upKey,
-                    ref downAvail, ref upAvail, ref downChecked, ref upChecked, staticMap, dynamicMap);
             }
         }
 

@@ -61,10 +61,12 @@ public partial struct KillAndSpawnSystem : ISystem
         var gameControllerComponent = SystemAPI.GetSingleton<GameControllerComponent>();
         var unitSpawner = SystemAPI.GetSingleton<TileUnitSpawner_Data>();
 
+        var ecb = SystemAPI.GetSingleton<BeginSimulationEntityCommandBufferSystem.Singleton>()
+            .CreateCommandBuffer(state.WorldUnmanaged).AsParallelWriter();
+
         state.Dependency = new SpawnZombiesJob
         {
-            Ecb = SystemAPI.GetSingleton<BeginSimulationEntityCommandBufferSystem.Singleton>()
-                .CreateCommandBuffer(state.WorldUnmanaged).AsParallelWriter(),
+            Ecb = ecb,
             ZombiePrefab = unitSpawner.ZombieUnit_Prefab,
             UnitHealth = gameControllerComponent.zombieStartingHealth,
             UnitDamage = gameControllerComponent.zombieDamage,
@@ -73,8 +75,7 @@ public partial struct KillAndSpawnSystem : ISystem
 
         state.Dependency = new KillUnitsJob
         {
-            Ecb = SystemAPI.GetSingleton<BeginSimulationEntityCommandBufferSystem.Singleton>()
-                .CreateCommandBuffer(state.WorldUnmanaged).AsParallelWriter()
+            Ecb = ecb
         }.ScheduleParallel(state.Dependency);
     }
 }

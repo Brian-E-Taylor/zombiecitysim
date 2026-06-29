@@ -7,12 +7,14 @@ public struct HashHumanPositionsComponent : IComponentData
 {
     public JobHandle Handle;
     public NativeParallelHashMap<uint, int> HashMap;
+    public int Count;
 }
 
 public struct HashZombiePositionsComponent : IComponentData
 {
     public JobHandle Handle;
     public NativeParallelHashMap<uint, int> HashMap;
+    public int Count;
 }
 
 [UpdateInGroup(typeof(InitialGroup))]
@@ -55,6 +57,7 @@ public partial struct HashUnitPositionsSystem : ISystem
 
         // Hash human positions
         var humanCount = _humanQuery.CalculateEntityCount();
+        humanComponent.ValueRW.Count = humanCount;
         _humanHashMap.Clear();
         if (_humanHashMap.Capacity < humanCount)
             _humanHashMap.Capacity = (int)(humanCount * 1.2f);
@@ -71,6 +74,7 @@ public partial struct HashUnitPositionsSystem : ISystem
 
         // Hash zombie positions
         var zombieCount = _zombieQuery.CalculateEntityCount();
+        zombieComponent.ValueRW.Count = zombieCount;
         _zombieHashMap.Clear();
         if (_zombieHashMap.Capacity < zombieCount)
             _zombieHashMap.Capacity = (int)(zombieCount * 1.2f);

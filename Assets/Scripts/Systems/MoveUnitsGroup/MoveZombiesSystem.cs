@@ -123,7 +123,7 @@ public partial struct MoveZombiesJob : IJobEntity
             // Only sight-confirmed targets propagate sound events. Hearing-triggered movement
             // does not create Audible entities, preventing cascading second-order sound chains.
             var audibleEntity = Ecb.CreateEntity(entityIndexInQuery);
-            Ecb.AddComponent(entityIndexInQuery, audibleEntity, new Audible { GridPositionValue = myGridPositionValue, Target = nearestTarget, Age = 0 });
+            Ecb.AddComponent(entityIndexInQuery, audibleEntity, new Audible { GridPositionValue = myGridPositionValue, Age = 0 });
         }
 
         desiredNextGridPosition = new DesiredNextGridPosition { Value = myGridPositionValue };
@@ -186,8 +186,7 @@ public partial struct MoveZombiesSystem : ISystem
 
         var cellSize = gameControllerComponent.zombieVisionDistance * 2 + 1;
         var cellCount = math.asint(math.ceil((float)gameControllerComponent.numTilesX / cellSize * gameControllerComponent.numTilesY / cellSize));
-        var humanCount = _humanQuery.CalculateEntityCount();
-
+        var humanCount = humanPositionsComponent.Count;
         var visionMapCapacity = cellCount < humanCount ? cellCount : humanCount;
         _zombieVisionHashMap.Clear();
         if (_zombieVisionHashMap.Capacity < visionMapCapacity)
@@ -230,13 +229,10 @@ public partial struct MoveZombiesSystem : ISystem
         }
 
         // Combine all hashing job handles before scheduling the main job
-        var hashJobHandles = new NativeArray<JobHandle>(4, Allocator.Temp);
-        hashJobHandles[0] = state.Dependency;
-        hashJobHandles[1] = hashFollowTargetVisionJobHandle;
-        hashJobHandles[2] = hashAudiblesJobHandle;
-        hashJobHandles[3] = hashHearingJobHandle;
-        state.Dependency = JobHandle.CombineDependencies(hashJobHandles);
-        hashJobHandles.Dispose();
+        state.Dependency = JobHandle.CombineDependencies(
+            JobHandle.CombineDependencies(hashHearingJobHandle, hashFollowTargetVisionJobHandle, hashAudiblesJobHandle),
+            state.Dependency
+        );
 
         state.Dependency = new MoveZombiesJob
         {

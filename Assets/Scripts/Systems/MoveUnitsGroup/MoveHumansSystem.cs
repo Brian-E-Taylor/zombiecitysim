@@ -149,8 +149,7 @@ public partial struct MoveHumansSystem : ISystem
 
         EnsureOffsets(ref _visionOffsets, ref _visionOffsetsRadius, gameControllerComponent.humanVisionDistance);
 
-        var zombieCount = _zombieQuery.CalculateEntityCount();
-
+        var zombieCount = zombiePositionsComponent.Count;
         var cellSize = gameControllerComponent.humanVisionDistance * 2 + 1;
         var cellCount = math.asint(math.ceil((float)gameControllerComponent.numTilesX / cellSize * gameControllerComponent.numTilesY / cellSize));
         var visionMapCapacity = cellCount < zombieCount ? cellCount : zombieCount;

@@ -32,7 +32,7 @@ public partial struct HashCollidablesSystem : ISystem
         // Query with change filter - used to detect if any static collidables changed
         _staticCollidableChangedQuery = state.GetEntityQuery(new EntityQueryBuilder(Allocator.Temp)
             .WithAll<StaticCollidable, GridPosition>());
-        _staticCollidableChangedQuery.AddChangedVersionFilter(typeof(GridPosition));
+        _staticCollidableChangedQuery.SetChangedVersionFilter(typeof(GridPosition));
 
         _dynamicCollidableEntityQuery = state.GetEntityQuery(new EntityQueryBuilder(Allocator.Temp)
             .WithAll<DynamicCollidable, GridPosition>());
